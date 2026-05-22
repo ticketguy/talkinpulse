@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  xId           String    @unique
+  username      String    @unique
+  displayName   String
+  imageUrl      String?
+  bio           String?
+  repScore      Int       @default(120)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  posts         Post[]
+  votes         Vote[]
+  comments      Comment[]
+
+  @@map("users")
+}
+
+model Post {
+  id          String     @id @default(cuid())
+  type        PostType
+  title       String
+  body        String?
+  signal      String?
+  category    String     @default("Meta")
+  endsAt      DateTime?
+  yesCount    Int        @default(0)
+  noCount     Int        @default(0)
+  hot         Boolean    @default(false)
+  volume      String     @default("0K")
+  authorId    String?
+  isAiGen     Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  author      User?      @relation(fields: [authorId], references: [id])
+  votes       Vote[]
+  comments    Comment[]
+
+  @@map("posts")
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  side      String   // "yes" | "no"
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
+
+  @@unique([userId, postId])
+  @@map("votes")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  body      String
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
+
+  @@map("comments")
+}
+
+enum PostType {
+  MARKET
+  TAKE
+  CONVERSATION
+  EVENT
+}
