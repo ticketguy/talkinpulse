@@ -3,9 +3,11 @@ import { useState } from "react";
 import { Post } from "@/types";
 import { Avatar } from "@/components/ui/Avatar";
 import { CategoryTag, PostTypeTag, AiBadge } from "@/components/ui/Tags";
-import { yesPercent, timeAgo, CATEGORY_COLORS } from "@/lib/utils";
+import { yesPercent, timeAgo } from "@/lib/utils";
 import { useAppStore } from "@/store";
 import { useSession } from "next-auth/react";
+import { Comments } from "./Comments";
+import { ShareButton } from "./ShareButton";
 
 interface PostCardProps {
   post: Post;
@@ -18,9 +20,11 @@ export function PostCard({ post, onVote }: PostCardProps) {
   const isDark = theme === "dark";
   const [expanded, setExpanded] = useState(false);
   const [voting, setVoting] = useState(false);
+  const [localYes, setLocalYes] = useState(post.yesCount);
+  const [localNo, setLocalNo] = useState(post.noCount);
 
   const localVote = votes[post.id] || post.userVote;
-  const yesPct = yesPercent(post.yesCount, post.noCount);
+  const yesPct = yesPercent(localYes, localNo);
   const noPct = 100 - yesPct;
 
   const t = {
@@ -34,12 +38,16 @@ export function PostCard({ post, onVote }: PostCardProps) {
     no: "#e01c1c",
     noDim: "rgba(224,28,28,0.08)",
     signalBg: isDark ? "rgba(224,28,28,0.03)" : "#fff8f8",
+    footerBg: isDark ? "rgba(255,255,255,0.02)" : "#fafafa",
     accent: "#e01c1c",
   };
 
   const handleVote = async (side: "yes" | "no") => {
     if (!session?.user || voting || localVote) return;
     setVoting(true);
+    // Optimistic update
+    if (side === "yes") setLocalYes((v) => v + 1);
+    else setLocalNo((v) => v + 1);
     await onVote?.(post.id, side);
     setVoting(false);
   };
@@ -55,6 +63,7 @@ export function PostCard({ post, onVote }: PostCardProps) {
       }}
       className="post-card"
     >
+      {/* ── Main content ── */}
       <div style={{ padding: "15px 16px" }}>
         {/* Header row */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
@@ -80,7 +89,7 @@ export function PostCard({ post, onVote }: PostCardProps) {
               {post.title}
             </p>
 
-            {/* Body for takes/convos/events */}
+            {/* Body */}
             {post.body && (
               <p style={{ fontSize: 13, color: t.textSub, lineHeight: 1.65, marginTop: 6, margin: "6px 0 0" }}>
                 {post.body}
@@ -92,7 +101,9 @@ export function PostCard({ post, onVote }: PostCardProps) {
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             {post.author ? (
               <div style={{ display: "flex", alignItems: "center", gap: 5, justifyContent: "flex-end", marginBottom: 3 }}>
-                <span style={{ fontSize: 11, color: t.accent, fontWeight: 600 }}>@{post.author.username}</span>
+                <span style={{ fontSize: 11, color: t.accent, fontWeight: 600 }}>
+                  @{post.author.username}
+                </span>
                 <Avatar username={post.author.username} imageUrl={post.author.imageUrl} size={20} />
               </div>
             ) : (
@@ -126,9 +137,9 @@ export function PostCard({ post, onVote }: PostCardProps) {
           </div>
         )}
 
-        {/* Footer */}
+        {/* Action row */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             {post.type === "MARKET" && (
               <span style={{ fontSize: 11, color: t.muted }}>
                 <span style={{ color: t.textSub, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
@@ -136,13 +147,6 @@ export function PostCard({ post, onVote }: PostCardProps) {
                 </span>{" "}vol
               </span>
             )}
-            <span style={{ fontSize: 11, color: t.muted }}>
-              <span style={{ color: t.textSub }}>{post._count?.votes || 0}</span>{" "}
-              {post.type === "MARKET" ? "callers" : "reactions"}
-            </span>
-            <span style={{ fontSize: 11, color: t.muted }}>
-              <span style={{ color: t.textSub }}>{post._count?.comments || 0}</span> replies
-            </span>
             {post.signal && (
               <button
                 onClick={() => setExpanded((v) => !v)}
@@ -210,7 +214,7 @@ export function PostCard({ post, onVote }: PostCardProps) {
         </div>
       </div>
 
-      {/* Signal panel */}
+      {/* ── Signal panel ── */}
       {expanded && post.signal && (
         <div style={{
           padding: "11px 16px",
@@ -224,6 +228,24 @@ export function PostCard({ post, onVote }: PostCardProps) {
           <p style={{ fontSize: 12, color: t.textSub, lineHeight: 1.65, margin: 0 }}>{post.signal}</p>
         </div>
       )}
+
+      {/* ── Footer: Share + Comments ── */}
+      <div style={{
+        padding: "10px 16px",
+        borderTop: `1px solid ${t.border}`,
+        background: t.footerBg,
+      }}>
+        {/* Share row */}
+        <div style={{ marginBottom: 10 }}>
+          <ShareButton post={post} />
+        </div>
+
+        {/* Comments */}
+        <Comments
+          postId={post.id}
+          initialCount={post._count?.comments || 0}
+        />
+      </div>
     </div>
   );
 }
