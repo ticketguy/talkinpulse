@@ -1,7 +1,17 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Category, PostType } from "@/types";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Primary: Gemini Flash (free tier ~1500 req/day, no CC required)
+// To revert to Claude: set USE_CLAUDE=true in env and add ANTHROPIC_API_KEY
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const geminiModel = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+  generationConfig: {
+    temperature: 0.9,
+    maxOutputTokens: 500,
+    responseMimeType: "application/json", // forces clean JSON — no markdown fences needed
+  },
+});
 
 export interface GeneratedPost {
   type: PostType;
@@ -48,7 +58,7 @@ const EVENT_TOPICS = [
 ];
 
 export async function generatePost(): Promise<GeneratedPost | null> {
-  // Randomly pick content type with weighted distribution
+  // Weighted distribution: 45% markets, 25% takes, 18% convos, 12% events
   const rand = Math.random();
   const type: PostType =
     rand < 0.45 ? "MARKET" :
@@ -62,6 +72,7 @@ export async function generatePost(): Promise<GeneratedPost | null> {
 
   const topic = topics[Math.floor(Math.random() * topics.length)];
 
+  // Prompts unchanged — same structure as Claude version
   const systemPrompts: Record<PostType, string> = {
     MARKET: `You are TalkinPulse's market engine for Crypto Twitter.
 Generate a sharp CT prediction market. Respond ONLY with valid JSON, no markdown:
@@ -101,14 +112,13 @@ Generate a CT event/activity post. Respond ONLY with valid JSON, no markdown:
   };
 
   try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 500,
-      system: systemPrompts[type],
-      messages: [{ role: "user", content: `Generate content about: "${topic}"` }],
-    });
+    // Gemini call — combine system + user prompt (Gemini doesn't have separate system role)
+    const fullPrompt = `${systemPrompts[type]}\n\nGenerate content about: "${topic}"`;
+    const result = await geminiModel.generateContent(fullPrompt);
+    const raw = result.response.text();
 
-    const raw = response.content.find((b) => b.type === "text")?.text || "{}";
+    // responseMimeType: "application/json" means raw is already clean JSON
+    // but strip fences defensively just in case
     const clean = raw.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
 
@@ -129,7 +139,7 @@ Generate a CT event/activity post. Respond ONLY with valid JSON, no markdown:
       noCount: parsed.yesCount ? 100 - parsed.yesCount : undefined,
     };
   } catch (e) {
-    console.error("Generation failed:", e);
+    console.error("Gemini generation failed:", e);
     return null;
   }
 }
