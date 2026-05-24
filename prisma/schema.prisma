@@ -3,49 +3,47 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("POSTGRES_PRISMA_URL")
-  directUrl = env("POSTGRES_URL_NON_POOLING")
+  provider = "postgresql"
 }
 
 model User {
-  id            String    @id @default(cuid())
-  xId           String    @unique
-  username      String    @unique
-  displayName   String
-  imageUrl      String?
-  bio           String?
-  repScore      Int       @default(120)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  xId         String    @unique
+  username    String    @unique
+  displayName String
+  imageUrl    String?
+  bio         String?
+  repScore    Int       @default(120)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  posts         Post[]
-  votes         Vote[]
-  comments      Comment[]
+  posts    Post[]
+  votes    Vote[]
+  comments Comment[]
 
   @@map("users")
 }
 
 model Post {
-  id          String     @id @default(cuid())
-  type        PostType
-  title       String
-  body        String?
-  signal      String?
-  category    String     @default("Meta")
-  endsAt      DateTime?
-  yesCount    Int        @default(0)
-  noCount     Int        @default(0)
-  hot         Boolean    @default(false)
-  volume      String     @default("0K")
-  authorId    String?
-  isAiGen     Boolean    @default(false)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id        String    @id @default(cuid())
+  type      PostType
+  title     String
+  body      String?
+  signal    String?
+  category  String    @default("Meta")
+  endsAt    DateTime?
+  yesCount  Int       @default(0)
+  noCount   Int       @default(0)
+  hot       Boolean   @default(false)
+  volume    String    @default("0K")
+  authorId  String?
+  isAiGen   Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  author      User?      @relation(fields: [authorId], references: [id])
-  votes       Vote[]
-  comments    Comment[]
+  author   User?     @relation(fields: [authorId], references: [id])
+  votes    Vote[]
+  comments Comment[]
 
   @@map("posts")
 }
@@ -57,8 +55,8 @@ model Vote {
   postId    String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  post      Post     @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
 
   @@unique([userId, postId])
   @@map("votes")
@@ -71,8 +69,8 @@ model Comment {
   postId    String
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
-  post      Post     @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
 
   @@map("comments")
 }
