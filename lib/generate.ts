@@ -5,7 +5,7 @@ import { Category, PostType } from "@/types";
 // To revert to Claude: set USE_CLAUDE=true in env and add ANTHROPIC_API_KEY
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash-latest",
+  model: "gemini-1.5-flash-8b",
   generationConfig: {
     temperature: 0.9,
     maxOutputTokens: 500,
