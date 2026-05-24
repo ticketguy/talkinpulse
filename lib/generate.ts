@@ -5,7 +5,7 @@ import { Category, PostType } from "@/types";
 // To revert to Claude: set USE_CLAUDE=true in env and add ANTHROPIC_API_KEY
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash",
+  model: "gemini-1.5-flash-latest",
   generationConfig: {
     temperature: 0.9,
     maxOutputTokens: 500,
@@ -138,7 +138,8 @@ Generate a CT event/activity post. Respond ONLY with valid JSON, no markdown:
       yesCount: parsed.yesCount,
       noCount: parsed.yesCount ? 100 - parsed.yesCount : undefined,
     };
-  } catch (e) {
+  } catch (e: any) {
+    if (e?.status === 429) { console.log("Gemini rate limited — retrying next cycle"); return null; }
     console.error("Gemini generation failed:", e);
     return null;
   }
