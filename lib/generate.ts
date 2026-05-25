@@ -4,11 +4,7 @@ import { Category, PostType } from "@/types";
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash-lite",
-  generationConfig: {
-    temperature: 0.9,
-    maxOutputTokens: 700,
-    responseMimeType: "application/json",
-  },
+  generationConfig: { temperature: 0.85, maxOutputTokens: 700, responseMimeType: "application/json" },
 });
 
 export interface GeneratedPost {
@@ -21,165 +17,110 @@ export interface GeneratedPost {
   hot: boolean;
   originator?: string;
   notableReplies?: string;
+  sourceUrl?: string;
   yesCount?: number;
   noCount?: number;
 }
 
-// Fetch real trending crypto topics via Tavily
-async function fetchLiveCryptoTopics(): Promise<string[]> {
-  const tavilyKey = process.env.TAVILY_API_KEY;
-  if (!tavilyKey) return [];
+interface TavilyResult {
+  title: string;
+  url: string;
+  content: string;
+  score: number;
+}
 
+async function fetchLiveCryptoTopics(): Promise<TavilyResult[]> {
+  const key = process.env.TAVILY_API_KEY;
+  if (!key) return [];
   try {
     const queries = [
-      "crypto twitter trending today",
-      "DeFi NFT narrative crypto CT 2026",
-      "Solana Ethereum Bitcoin latest news today",
+      "crypto twitter trending narrative today",
+      "DeFi Solana Ethereum controversy debate 2026",
+      "NFT Web3 community discussion trending",
+      "crypto airdrop governance vote controversy",
     ];
-
     const query = queries[Math.floor(Math.random() * queries.length)];
-
     const res = await fetch("https://api.tavily.com/search", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        api_key: tavilyKey,
-        query,
-        search_depth: "basic",
-        max_results: 5,
-        include_answer: true,
-        topic: "finance",
-      }),
+      body: JSON.stringify({ api_key: key, query, search_depth: "basic", max_results: 5, topic: "finance" }),
     });
-
     if (!res.ok) return [];
     const data = await res.json();
-
-    // Extract titles and snippets from results
-    const topics: string[] = [];
-    if (data.answer) topics.push(data.answer.slice(0, 200));
-    if (data.results) {
-      data.results.forEach((r: any) => {
-        if (r.title) topics.push(r.title);
-        if (r.content) topics.push(r.content.slice(0, 150));
-      });
-    }
-    return topics.slice(0, 5);
+    return (data.results || []).map((r: any) => ({ title: r.title, url: r.url, content: r.content?.slice(0, 300), score: r.score }));
   } catch (e) {
-    console.error("Tavily fetch failed:", e);
+    console.error("Tavily error:", e);
     return [];
   }
 }
 
-// Fallback static topics
-const FALLBACK_TOPICS: Record<PostType, string[]> = {
-  MARKET: [
-    "Will Solana maintain dominance over other L1s this quarter?",
-    "Is the memecoin supercycle thesis dead or just resting?",
-    "Will BTC dominance stay above 55% through Q3 2026?",
-    "Are governance tokens actually worthless in 2026?",
-    "Will any new L1 seriously challenge Solana this cycle?",
-    "Is Base winning the L2 wars or still too early to call?",
-  ],
-  TAKE: [
-    "Why most CT alpha is just recycled narratives from 2021",
-    "The real reason NFT communities die after mint",
-    "Why builders who post threads ship less",
-    "The difference between CT signal and CT noise",
-    "Why the loudest CT accounts are usually the most wrong",
-    "VCs are quietly reshaping CT culture and nobody is talking about it",
-  ],
-  CONVERSATION: [
-    "Should NFT royalties be enforced at protocol level or left to marketplaces?",
-    "Is the airdrop farming meta killing genuine crypto adoption?",
-    "Are CT debates about AI replacing devs actually changing hiring?",
-    "Is DeFi summer coming back or is institutional money changing everything?",
-  ],
-  EVENT: [
-    "Major protocol upgrade going live this week",
-    "New airdrop eligibility snapshot announced",
-    "Governance vote live: community treasury allocation",
-    "Whale wallet movement sparking speculation on CT",
-  ],
-};
-
 export async function generatePost(): Promise<GeneratedPost | null> {
   const rand = Math.random();
-  const type: PostType =
-    rand < 0.40 ? "MARKET" :
-    rand < 0.65 ? "TAKE" :
-    rand < 0.85 ? "CONVERSATION" : "EVENT";
+  const type: PostType = rand < 0.40 ? "MARKET" : rand < 0.65 ? "TAKE" : rand < 0.85 ? "CONVERSATION" : "EVENT";
 
-  // Try to get live topics from Tavily, fall back to static
-  const liveTopics = await fetchLiveCryptoTopics();
-  const fallbackTopics = FALLBACK_TOPICS[type];
+  const liveResults = await fetchLiveCryptoTopics();
+  const hasLive = liveResults.length > 0;
+  const source = hasLive ? liveResults[Math.floor(Math.random() * liveResults.length)] : null;
 
-  // Mix live and fallback — prefer live if available
-  const allTopics = liveTopics.length > 0
-    ? [...liveTopics, ...fallbackTopics]
-    : fallbackTopics;
-
-  const topic = allTopics[Math.floor(Math.random() * Math.min(allTopics.length, 6))];
+  const topicContext = source
+    ? `Based on this real article:\nTitle: ${source.title}\nURL: ${source.url}\nContent: ${source.content}`
+    : "Generate based on current crypto Twitter trends";
 
   const systemPrompts: Record<PostType, string> = {
     MARKET: `You are TalkinPulse's market engine for Crypto Twitter.
-Based on the provided topic or news, generate a sharp CT prediction market.
-Respond ONLY with valid JSON, no markdown:
+Generate a CT prediction market based ONLY on the provided real source. Respond ONLY with valid JSON:
 {
-  "title": "sharp yes/no question max 90 chars, CT-native language, based on the topic",
-  "signal": "1-2 sentence CT signal — what the sentiment and data suggest right now",
+  "title": "sharp yes/no question max 90 chars based on the real topic",
+  "signal": "1-2 sentences of what the source suggests about sentiment/outcome",
   "category": one of ["Narrative","Founder","Collection","Meta","Alpha"],
   "yesCount": integer 20-80,
-  "endsInDays": integer 2-14,
+  "endsInDays": integer between 1 and 14,
   "hot": true or false,
-  "originator": "realistic CT handle (e.g. @cobie, @inversebrah, @0xfoobar, @sassal0x) who would have started this topic",
-  "notableReplies": "2-3 short CT-style perspectives separated by | — e.g. 'Bears pointing to declining TVL | Bulls citing whale accumulation | Degens waiting for confirmation'"
+  "originator": "X handle of who likely started this discussion e.g. @cobie",
+  "notableReplies": "2-3 CT perspectives separated by |"
 }`,
     TAKE: `You are TalkinPulse's take engine for Crypto Twitter.
-Based on the provided topic or news, generate a sharp CT take.
-Respond ONLY with valid JSON, no markdown:
+Generate a CT take based ONLY on the provided real source. Respond ONLY with valid JSON:
 {
-  "title": "bold punchy take headline max 80 chars, based on real CT sentiment around the topic",
-  "body": "2-3 sentences expanding the take in CT voice — direct, confident, no fluff",
+  "title": "bold take headline max 80 chars directly about the real topic",
+  "body": "2-3 sentences expanding the take in CT voice based on the real content",
   "category": one of ["Narrative","Meta","Founder","Alpha"],
   "hot": true or false,
-  "originator": "realistic CT handle who would post this take",
-  "notableReplies": "2-3 short CT responses separated by | — mix of agree/disagree/nuance"
+  "originator": "X handle of who would likely post this take",
+  "notableReplies": "2-3 CT responses separated by |"
 }`,
     CONVERSATION: `You are TalkinPulse's conversation engine for Crypto Twitter.
-Based on the provided topic or news, generate a CT debate prompt.
-Respond ONLY with valid JSON, no markdown:
+Generate a CT debate prompt based ONLY on the provided real source. Respond ONLY with valid JSON:
 {
-  "title": "debate question or conversation starter max 90 chars",
-  "body": "1-2 sentences of context framing the debate based on what's actually happening",
+  "title": "debate question based on the real topic max 90 chars",
+  "body": "1-2 sentences of context from the real content",
   "category": one of ["Narrative","Meta","Founder","Collection","Alpha","Debate"],
   "hot": true or false,
-  "originator": "realistic CT handle who started this debate",
-  "notableReplies": "2-3 short CT-style takes from different sides separated by |"
+  "originator": "X handle who likely started this debate",
+  "notableReplies": "2-3 CT perspectives from different sides separated by |"
 }`,
     EVENT: `You are TalkinPulse's event engine for Crypto Twitter.
-Based on the provided topic or news, generate a CT event post.
-Respond ONLY with valid JSON, no markdown:
+Generate a CT event post based ONLY on the provided real source. Respond ONLY with valid JSON:
 {
-  "title": "event title max 80 chars — specific, not generic",
-  "body": "1-2 sentences — what's happening and why CT is talking about it",
+  "title": "specific event title max 80 chars based on the real news",
+  "body": "1-2 sentences about what's actually happening",
   "category": one of ["Narrative","Meta","Collection","Alpha","Event"],
   "hot": true or false,
-  "originator": "realistic CT handle or project account associated with this",
-  "notableReplies": "2-3 short CT reactions separated by |"
+  "originator": "X handle or project account tied to this event",
+  "notableReplies": "2-3 CT reactions separated by |"
 }`,
   };
 
   try {
-    const fullPrompt = `${systemPrompts[type]}\n\nTopic/news to base this on: "${topic}"`;
+    const fullPrompt = `${systemPrompts[type]}\n\n${topicContext}`;
     const result = await geminiModel.generateContent(fullPrompt);
     const raw = result.response.text();
     const clean = raw.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
 
-    const endsAt = parsed.endsInDays
-      ? new Date(Date.now() + parsed.endsInDays * 86400000)
-      : undefined;
+    // Enforce max 14 days
+    const endsInDays = Math.min(parsed.endsInDays || 7, 14);
+    const endsAt = type === "MARKET" ? new Date(Date.now() + endsInDays * 86400000) : undefined;
 
     return {
       type,
@@ -189,14 +130,15 @@ Respond ONLY with valid JSON, no markdown:
       category: parsed.category || "Meta",
       endsAt,
       hot: parsed.hot ?? false,
-      originator: parsed.originator || null,
-      notableReplies: parsed.notableReplies || null,
-      yesCount: parsed.yesCount,
-      noCount: parsed.yesCount ? 100 - parsed.yesCount : undefined,
+      originator: parsed.originator || undefined,
+      notableReplies: parsed.notableReplies || undefined,
+      sourceUrl: source?.url || undefined,
+      yesCount: parsed.yesCount || 50,
+      noCount: parsed.yesCount ? 100 - parsed.yesCount : 50,
     };
   } catch (e: any) {
-    if (e?.status === 429) { console.log("Gemini rate limited — retrying next cycle"); return null; }
-    console.error("Gemini generation failed:", e);
+    if (e?.status === 429) { console.log("Gemini rate limited"); return null; }
+    console.error("Generation failed:", e);
     return null;
   }
 }

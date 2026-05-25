@@ -95,7 +95,7 @@ export function Feed() {
         setPosts(prev =>
           prev.map(p =>
             p.id === postId
-              ? { ...p, yesCount: data.yesCount, noCount: data.noCount, userVote: side }
+              ? { ...p, yesCount: data.yesCount, noCount: data.noCount, userVote: { side, pointsWagered: data.pointsWagered || 0 } }
               : p
           )
         );

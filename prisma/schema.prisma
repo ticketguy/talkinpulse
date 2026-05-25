@@ -9,57 +9,74 @@ datasource db {
 }
 
 model User {
-  id          String    @id @default(cuid())
-  xId         String    @unique
-  username    String    @unique
-  displayName String
-  imageUrl    String?
-  bio         String?
-  repScore    Int       @default(120)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  xId             String    @unique
+  username        String    @unique
+  displayName     String
+  imageUrl        String?
+  bio             String?
+  customBio       String?
+  customImageUrl  String?
+  repScore        Int       @default(0)
+  repLevel        RepLevel  @default(NEW_WEB3)
+  talkinPoints    Int       @default(100)
+  xProfileData    Json?
+  isAdmin         Boolean   @default(false)
+  adminRole       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  posts    Post[]
-  votes    Vote[]
-  comments Comment[]
+  posts           Post[]
+  votes           Vote[]
+  comments        Comment[]
+  pointTxns       PointTransaction[]
+  adminAccess     AdminAccess[]
 
   @@map("users")
 }
 
 model Post {
-  id             String    @id @default(cuid())
-  type           PostType
-  title          String
-  body           String?
-  signal         String?
-  category       String    @default("Meta")
-  endsAt         DateTime?
-  yesCount       Int       @default(0)
-  noCount        Int       @default(0)
-  hot            Boolean   @default(false)
-  originator     String?
-  notableReplies String?
-  authorId       String?
-  isAiGen        Boolean   @default(false)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id              String      @id @default(cuid())
+  type            PostType
+  title           String
+  body            String?
+  signal          String?
+  category        String      @default("Meta")
+  endsAt          DateTime?
+  yesCount        Int         @default(0)
+  noCount         Int         @default(0)
+  hot             Boolean     @default(false)
+  originator      String?
+  notableReplies  String?
+  sourceUrl       String?
+  xPostId         String?
+  authorId        String?
+  isAiGen         Boolean     @default(false)
+  resolvedAt      DateTime?
+  resolvedOutcome String?     // "YES" | "NO" | "NEUTRAL"
+  pointsPool      Int         @default(0)
+  resolutionNote  String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
 
-  author   User?     @relation(fields: [authorId], references: [id])
-  votes    Vote[]
-  comments Comment[]
+  author          User?       @relation(fields: [authorId], references: [id])
+  votes           Vote[]
+  comments        Comment[]
 
   @@map("posts")
 }
 
 model Vote {
-  id        String   @id @default(cuid())
-  side      String
-  userId    String
-  postId    String
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  side          String   // "yes" | "no"
+  pointsWagered Int      @default(0)
+  pointsWon     Int      @default(0)
+  userId        String
+  postId        String
+  createdAt     DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  post Post @relation(fields: [postId], references: [id])
+  user          User     @relation(fields: [userId], references: [id])
+  post          Post     @relation(fields: [postId], references: [id])
 
   @@unique([userId, postId])
   @@map("votes")
@@ -70,12 +87,50 @@ model Comment {
   body      String
   userId    String
   postId    String
+  xReplyId  String?
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
-  post Post @relation(fields: [postId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  post      Post     @relation(fields: [postId], references: [id])
 
   @@map("comments")
+}
+
+model PointTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Int
+  type        String   // "vote_win" | "vote_loss" | "vote_neutral" | "comment" | "rep_level_up" | "manual" | "weekly_reward" | "signup"
+  description String?
+  postId      String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("point_transactions")
+}
+
+model AdminAccess {
+  id          String   @id @default(cuid())
+  userId      String
+  role        AdminRole
+  grantedBy   String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("admin_access")
+}
+
+model PlatformSettings {
+  id              String   @id @default("singleton")
+  signupPoints    Int      @default(100)
+  commentPoints   Int      @default(2)
+  voteNeutralPts  Int      @default(5)
+  weeklyRewardAmt Int      @default(50)
+  updatedAt       DateTime @updatedAt
+
+  @@map("platform_settings")
 }
 
 enum PostType {
@@ -83,4 +138,20 @@ enum PostType {
   TAKE
   CONVERSATION
   EVENT
+}
+
+enum RepLevel {
+  NEW_WEB3
+  WEB3_ASSOCIATE
+  CALLER
+  SIGNAL_CALLER
+  VERIFIED_VOICE
+  CT_ORACLE
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  MODERATOR
+  POINTS_MANAGER
+  READ_ONLY
 }

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useAppStore } from "@/store";
 import { Avatar } from "@/components/ui/Avatar";
@@ -132,6 +133,9 @@ export function Header() {
               />
               <span className="hide-mobile" style={{ fontSize: 11, color: t.text, fontWeight: 600 }}>
                 @{user?.username || user?.name}
+              </span>
+              <span className="hide-mobile" style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, fontFamily: "monospace" }}>
+                {user?.talkinPoints || 100}TP
               </span>
               <span style={{ fontSize: 8, color: t.muted }}>▼</span>
             </div>

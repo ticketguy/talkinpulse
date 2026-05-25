@@ -6,7 +6,7 @@ import { MobileNav } from "@/components/layout/MobileNav";
 import { Feed } from "@/components/feed/Feed";
 import { useAppStore } from "@/store";
 import { SignalsPage } from "./signals/SignalsPage";
-import { ProfilePage } from "./profile/ProfilePage";
+import ProfilePage from "./profile/ProfilePage";
 
 interface Stats {
   markets: number;

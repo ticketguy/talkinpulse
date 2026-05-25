@@ -7,7 +7,7 @@ import { yesPercent, timeAgo } from "@/lib/utils";
 import { useAppStore } from "@/store";
 import { useSession } from "next-auth/react";
 import { Comments } from "./Comments";
-import { ShareButton } from "./ShareButton";
+
 
 interface PostCardProps {
   post: Post;
@@ -190,8 +190,19 @@ export function PostCard({ post, onVote }: PostCardProps) {
 
       {/* Footer: share + comments */}
       <div style={{ padding: "10px 16px", borderTop: `1px solid ${t.border}`, background: t.footerBg }}>
-        <div style={{ marginBottom: 10 }}>
-          <ShareButton post={post} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+          {post.sourceUrl && (
+            <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 7, border: `1px solid ${t.border}`, background: "transparent", color: t.muted, fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+              Source
+            </a>
+          )}
+          {post.xPostId && (
+            <a href={`https://x.com/i/web/status/${post.xPostId}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 7, border: `1px solid ${t.border}`, background: "transparent", color: t.muted, fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.741l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.912-5.622z"/></svg>
+              Reply on X
+            </a>
+          )}
         </div>
         <Comments postId={post.id} initialCount={post._count?.comments || 0} />
       </div>
