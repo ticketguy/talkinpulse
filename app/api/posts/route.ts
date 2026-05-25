@@ -7,6 +7,7 @@ export async function GET(req: NextRequest) {
   const session = await auth();
   const { searchParams } = new URL(req.url);
   const filter = (searchParams.get("filter") || "all") as FeedFilter;
+  const rank = searchParams.get("rank") || "24h";
   const cursor = searchParams.get("cursor");
   const take = 20;
 
@@ -22,30 +23,35 @@ export async function GET(req: NextRequest) {
       where.createdAt = { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
     }
 
+    // Takes ranking by time period
+    if (filter === "takes" && rank) {
+      const periodMap: Record<string, number> = {
+        "24h": 24 * 60 * 60 * 1000,
+        "7d": 7 * 24 * 60 * 60 * 1000,
+        "30d": 30 * 24 * 60 * 60 * 1000,
+        "1y": 365 * 24 * 60 * 60 * 1000,
+      };
+      const ms = periodMap[rank] || periodMap["24h"];
+      where.createdAt = { gte: new Date(Date.now() - ms) };
+    }
+
+    // Order takes by vote count (engagement), others by hot then recent
+    const orderBy: any = filter === "takes"
+      ? [{ votes: { _count: "desc" } }, { createdAt: "desc" }]
+      : [{ hot: "desc" }, { createdAt: "desc" }];
+
     const posts = await prisma.post.findMany({
       where,
       take: take + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      orderBy: [{ hot: "desc" }, { createdAt: "desc" }],
+      orderBy,
       include: {
         author: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            imageUrl: true,
-            repScore: true,
-            xId: true,
-          },
+          select: { id: true, username: true, displayName: true, imageUrl: true, repScore: true, xId: true },
         },
         _count: { select: { comments: true, votes: true } },
         ...(session?.user
-          ? {
-              votes: {
-                where: { userId: (session.user as any).id },
-                select: { side: true },
-              },
-            }
+          ? { votes: { where: { userId: (session.user as any).id }, select: { side: true } } }
           : {}),
       },
     });
@@ -53,17 +59,14 @@ export async function GET(req: NextRequest) {
     const hasMore = posts.length > take;
     const items = posts.slice(0, take).map((p: any) => ({
       ...p,
-      userVote: (p as any).votes?.[0]?.side || null,
+      userVote: p.votes?.[0]?.side || null,
       votes: undefined,
       endsAt: p.endsAt?.toISOString() || null,
       createdAt: p.createdAt.toISOString(),
       updatedAt: p.updatedAt.toISOString(),
     }));
 
-    return NextResponse.json({
-      posts: items,
-      nextCursor: hasMore ? items[items.length - 1].id : null,
-    });
+    return NextResponse.json({ posts: items, nextCursor: hasMore ? items[items.length - 1].id : null });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });
@@ -72,17 +75,12 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const body = await req.json();
     const { type, title, body: postBody, category, endsAt } = body;
-
-    if (!type || !title) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
+    if (!type || !title) return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
 
     const post = await prisma.post.create({
       data: {
@@ -97,9 +95,7 @@ export async function POST(req: NextRequest) {
         noCount: type === "MARKET" ? 50 : 0,
       },
       include: {
-        author: {
-          select: { id: true, username: true, displayName: true, imageUrl: true, repScore: true, xId: true },
-        },
+        author: { select: { id: true, username: true, displayName: true, imageUrl: true, repScore: true, xId: true } },
         _count: { select: { comments: true, votes: true } },
       },
     });

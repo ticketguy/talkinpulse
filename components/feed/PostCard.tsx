@@ -70,7 +70,6 @@ export function PostCard({ post, onVote }: PostCardProps) {
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
           <PostTypeTag type={post.type} />
           <CategoryTag category={post.category as any} />
-          {post.hot && <span style={{ fontSize: 11 }}>🔥</span>}
           {localVote && (
             <span style={{
               fontSize: 9, padding: "2px 8px", borderRadius: 20, fontWeight: 700, letterSpacing: 1,
