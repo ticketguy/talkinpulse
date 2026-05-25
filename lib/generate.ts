@@ -1,15 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Category, PostType } from "@/types";
 
-// Primary: Gemini Flash (free tier ~1500 req/day, no CC required)
-// To revert to Claude: set USE_CLAUDE=true in env and add ANTHROPIC_API_KEY
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 const geminiModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash-lite",
   generationConfig: {
     temperature: 0.9,
-    maxOutputTokens: 500,
-    responseMimeType: "application/json", // forces clean JSON — no markdown fences needed
+    maxOutputTokens: 600,
+    responseMimeType: "application/json",
   },
 });
 
@@ -21,7 +19,8 @@ export interface GeneratedPost {
   category: Category;
   endsAt?: Date;
   hot: boolean;
-  volume: string;
+  originator?: string;       // CT handle who started the narrative
+  notableReplies?: string;   // 2-3 notable CT perspectives on the topic
   yesCount?: number;
   noCount?: number;
 }
@@ -48,6 +47,8 @@ const TAKE_TOPICS = [
   "The difference between CT signal and CT noise",
   "Why NFT utility failed and what actually works",
   "How VCs are quietly reshaping CT culture",
+  "Why the loudest CT accounts are usually the most wrong",
+  "The builder vs. poster divide is getting worse",
 ];
 
 const EVENT_TOPICS = [
@@ -55,10 +56,11 @@ const EVENT_TOPICS = [
   "New airdrop eligibility snapshot announced",
   "CT debate: should NFT royalties be on-chain enforced?",
   "Governance vote: community treasury allocation",
+  "New L2 bridge launch — CT divided on security",
+  "Whale wallet movement sparking speculation",
 ];
 
 export async function generatePost(): Promise<GeneratedPost | null> {
-  // Weighted distribution: 45% markets, 25% takes, 18% convos, 12% events
   const rand = Math.random();
   const type: PostType =
     rand < 0.45 ? "MARKET" :
@@ -72,7 +74,6 @@ export async function generatePost(): Promise<GeneratedPost | null> {
 
   const topic = topics[Math.floor(Math.random() * topics.length)];
 
-  // Prompts unchanged — same structure as Claude version
   const systemPrompts: Record<PostType, string> = {
     MARKET: `You are TalkinPulse's market engine for Crypto Twitter.
 Generate a sharp CT prediction market. Respond ONLY with valid JSON, no markdown:
@@ -82,8 +83,9 @@ Generate a sharp CT prediction market. Respond ONLY with valid JSON, no markdown
   "category": one of ["Narrative","Founder","Collection","Meta","Alpha"],
   "yesCount": integer 20-80,
   "endsInDays": integer 2-14,
-  "volume": "XX.XK",
-  "hot": true or false
+  "hot": true or false,
+  "originator": "realistic CT handle (e.g. @cobie, @inversebrah, @0xfoobar) who would have started this topic — make it believable for the narrative",
+  "notableReplies": "2-3 short CT-style perspectives on this topic separated by | — e.g. 'Bears pointing to declining TVL | Bulls citing whale accumulation | Most degens waiting for confirmation'"
 }`,
     TAKE: `You are TalkinPulse's take engine for Crypto Twitter.
 Generate a sharp CT take/opinion post. Respond ONLY with valid JSON, no markdown:
@@ -91,7 +93,9 @@ Generate a sharp CT take/opinion post. Respond ONLY with valid JSON, no markdown
   "title": "bold punchy take headline max 80 chars",
   "body": "2-3 sentence expansion of the take, CT voice, direct",
   "category": one of ["Narrative","Meta","Founder","Alpha"],
-  "hot": true or false
+  "hot": true or false,
+  "originator": "realistic CT handle who would post this take",
+  "notableReplies": "2-3 short CT-style responses separated by | — mix of agree/disagree/nuance"
 }`,
     CONVERSATION: `You are TalkinPulse's conversation engine for Crypto Twitter.
 Generate a CT debate/conversation prompt. Respond ONLY with valid JSON, no markdown:
@@ -99,26 +103,26 @@ Generate a CT debate/conversation prompt. Respond ONLY with valid JSON, no markd
   "title": "debate question or conversation starter max 90 chars",
   "body": "1-2 sentences of context or framing for the debate",
   "category": one of ["Narrative","Meta","Founder","Collection","Alpha","Debate"],
-  "hot": true or false
+  "hot": true or false,
+  "originator": "realistic CT handle who started this debate",
+  "notableReplies": "2-3 short CT-style takes from different sides separated by |"
 }`,
     EVENT: `You are TalkinPulse's event engine for Crypto Twitter.
 Generate a CT event/activity post. Respond ONLY with valid JSON, no markdown:
 {
   "title": "event title max 80 chars",
-  "body": "1-2 sentence description of what's happening and why it matters",
+  "body": "1-2 sentence description of what's happening and why it matters to CT",
   "category": one of ["Narrative","Meta","Collection","Alpha","Event"],
-  "hot": true or false
+  "hot": true or false,
+  "originator": "realistic CT handle or project account associated with this event",
+  "notableReplies": "2-3 short CT reactions to this event separated by |"
 }`,
   };
 
   try {
-    // Gemini call — combine system + user prompt (Gemini doesn't have separate system role)
     const fullPrompt = `${systemPrompts[type]}\n\nGenerate content about: "${topic}"`;
     const result = await geminiModel.generateContent(fullPrompt);
     const raw = result.response.text();
-
-    // responseMimeType: "application/json" means raw is already clean JSON
-    // but strip fences defensively just in case
     const clean = raw.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(clean);
 
@@ -134,7 +138,8 @@ Generate a CT event/activity post. Respond ONLY with valid JSON, no markdown:
       category: parsed.category || "Meta",
       endsAt,
       hot: parsed.hot ?? false,
-      volume: parsed.volume || "0K",
+      originator: parsed.originator || null,
+      notableReplies: parsed.notableReplies || null,
       yesCount: parsed.yesCount,
       noCount: parsed.yesCount ? 100 - parsed.yesCount : undefined,
     };

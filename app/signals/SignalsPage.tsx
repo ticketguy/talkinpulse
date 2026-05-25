@@ -68,7 +68,7 @@ export function SignalsPage() {
                     <div style={{ height: 3, background: isDark ? "rgba(255,255,255,0.05)" : "#f0f0f0", borderRadius: 2, overflow: "hidden", marginBottom: 5 }}>
                       <div style={{ height: "100%", width: `${yesPct}%`, background: `linear-gradient(90deg, ${col}80, ${col})`, borderRadius: 2 }} />
                     </div>
-                    <span style={{ fontSize: 11, color: t.muted }}>{m._count?.votes || 0} callers · ${m.volume} vol</span>
+                    <span style={{ fontSize: 11, color: t.muted }}>{m._count?.votes || 0} callers</span>
                   </div>
                 );
               })}

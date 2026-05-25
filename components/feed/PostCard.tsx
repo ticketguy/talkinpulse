@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { Post } from "@/types";
 import { Avatar } from "@/components/ui/Avatar";
-import { CategoryTag, PostTypeTag, AiBadge } from "@/components/ui/Tags";
+import { CategoryTag, PostTypeTag } from "@/components/ui/Tags";
 import { yesPercent, timeAgo } from "@/lib/utils";
 import { useAppStore } from "@/store";
 import { useSession } from "next-auth/react";
@@ -18,14 +18,14 @@ export function PostCard({ post, onVote }: PostCardProps) {
   const { data: session } = useSession();
   const { theme, votes } = useAppStore();
   const isDark = theme === "dark";
-  const [expanded, setExpanded] = useState(false);
+  const [sigOpen, setSigOpen] = useState(false);
+  const [repliesOpen, setRepliesOpen] = useState(false);
   const [voting, setVoting] = useState(false);
   const [localYes, setLocalYes] = useState(post.yesCount);
   const [localNo, setLocalNo] = useState(post.noCount);
 
   const localVote = votes[post.id] || post.userVote;
   const yesPct = yesPercent(localYes, localNo);
-  const noPct = 100 - yesPct;
 
   const t = {
     surface: isDark ? "#141414" : "#ffffff",
@@ -38,6 +38,7 @@ export function PostCard({ post, onVote }: PostCardProps) {
     no: "#e01c1c",
     noDim: "rgba(224,28,28,0.08)",
     signalBg: isDark ? "rgba(224,28,28,0.03)" : "#fff8f8",
+    repliesBg: isDark ? "rgba(255,255,255,0.02)" : "#fafafa",
     footerBg: isDark ? "rgba(255,255,255,0.02)" : "#fafafa",
     accent: "#e01c1c",
   };
@@ -45,206 +46,155 @@ export function PostCard({ post, onVote }: PostCardProps) {
   const handleVote = async (side: "yes" | "no") => {
     if (!session?.user || voting || localVote) return;
     setVoting(true);
-    // Optimistic update
     if (side === "yes") setLocalYes((v) => v + 1);
     else setLocalNo((v) => v + 1);
     await onVote?.(post.id, side);
     setVoting(false);
   };
 
+  // Parse notable replies
+  const notableRepliesArray = post.notableReplies
+    ? post.notableReplies.split("|").map((r) => r.trim()).filter(Boolean)
+    : [];
+
+  const displayAuthor = post.author?.username || post.originator?.replace("@", "");
+  const displayHandle = post.originator || (post.author ? `@${post.author.username}` : null);
+
   return (
-    <div
-      style={{
-        background: t.surface,
-        border: `1px solid ${t.border}`,
-        borderRadius: 14,
-        overflow: "hidden",
-        transition: "border-color .2s, box-shadow .2s",
-      }}
-      className="post-card"
-    >
-      {/* ── Main content ── */}
-      <div style={{ padding: "15px 16px" }}>
-        {/* Header row */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: 10 }}>
-          <div style={{ flex: 1 }}>
-            {/* Tags */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-              <PostTypeTag type={post.type} />
-              <CategoryTag category={post.category as any} />
-              {post.isAiGen && <AiBadge />}
-              {post.hot && <span style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700 }}>🔥</span>}
-              {localVote && (
-                <span style={{
-                  fontSize: 9, padding: "2px 8px", borderRadius: 20, fontWeight: 700, letterSpacing: 1,
-                  background: localVote === "yes" ? t.yesDim : t.noDim,
-                  color: localVote === "yes" ? t.yes : t.no,
-                  border: `1px solid ${localVote === "yes" ? t.yes : t.no}25`,
-                }}>✓ {localVote.toUpperCase()}</span>
-              )}
-            </div>
+    <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 12, overflow: "hidden", transition: "border-color .2s" }} className="post-card">
 
-            {/* Title */}
-            <p style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.55, color: t.text, margin: 0 }}>
-              {post.title}
-            </p>
+      {/* Main content */}
+      <div style={{ padding: "14px 16px" }}>
 
-            {/* Body */}
-            {post.body && (
-              <p style={{ fontSize: 13, color: t.textSub, lineHeight: 1.65, marginTop: 6, margin: "6px 0 0" }}>
-                {post.body}
-              </p>
-            )}
-          </div>
+        {/* Tags row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+          <PostTypeTag type={post.type} />
+          <CategoryTag category={post.category as any} />
+          {post.hot && <span style={{ fontSize: 11 }}>🔥</span>}
+          {localVote && (
+            <span style={{
+              fontSize: 9, padding: "2px 8px", borderRadius: 20, fontWeight: 700, letterSpacing: 1,
+              background: localVote === "yes" ? t.yesDim : t.noDim,
+              color: localVote === "yes" ? t.yes : t.no,
+              border: `1px solid ${localVote === "yes" ? t.yes : t.no}25`,
+            }}>✓ {localVote.toUpperCase()}</span>
+          )}
+        </div>
 
-          {/* Author + time */}
+        {/* Title + meta */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: post.body ? 8 : 10 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.55, color: t.text, margin: 0, flex: 1 }}>
+            {post.title}
+          </p>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
-            {post.author ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 5, justifyContent: "flex-end", marginBottom: 3 }}>
-                <span style={{ fontSize: 11, color: t.accent, fontWeight: 600 }}>
-                  @{post.author.username}
-                </span>
-                <Avatar username={post.author.username} imageUrl={post.author.imageUrl} size={20} />
-              </div>
-            ) : (
-              <div style={{ fontSize: 10, color: "#10b981", marginBottom: 3 }}>✦ AI</div>
-            )}
-            <div style={{ fontSize: 10, color: t.muted, fontFamily: "'JetBrains Mono', monospace" }}>
-              {timeAgo(post.createdAt)}
-            </div>
-            {post.endsAt && (
-              <div style={{ fontSize: 10, color: t.muted, marginTop: 2 }}>
-                ends {timeAgo(post.endsAt)}
+            {displayHandle && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end", marginBottom: 2 }}>
+                <span style={{ fontSize: 11, color: t.accent, fontWeight: 700 }}>{displayHandle}</span>
+                <Avatar username={displayAuthor || "ct"} imageUrl={post.author?.imageUrl} size={18} />
               </div>
             )}
+            <div style={{ fontSize: 10, color: t.muted, fontFamily: "'JetBrains Mono', monospace" }}>{timeAgo(post.createdAt)}</div>
+            {post.endsAt && <div style={{ fontSize: 10, color: t.muted, marginTop: 1 }}>ends {timeAgo(post.endsAt)}</div>}
           </div>
         </div>
 
-        {/* Market voting bar */}
+        {/* Body */}
+        {post.body && (
+          <p style={{ fontSize: 13, color: t.textSub, lineHeight: 1.65, margin: "0 0 10px" }}>{post.body}</p>
+        )}
+
+        {/* Market bar */}
         {post.type === "MARKET" && (
           <div style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: t.yes }}>YES {yesPct}%</span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: t.no }}>NO {noPct}%</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: t.no }}>NO {100 - yesPct}%</span>
             </div>
-            <div style={{ height: 5, background: isDark ? "rgba(255,255,255,0.06)" : "#f0f0f0", borderRadius: 3, overflow: "hidden" }}>
-              <div style={{
-                height: "100%", width: `${yesPct}%`, borderRadius: 3,
-                background: `linear-gradient(90deg, ${t.yes}90, ${t.yes})`,
-                transition: "width .8s cubic-bezier(.4,0,.2,1)",
-              }} />
+            <div style={{ height: 4, background: isDark ? "rgba(255,255,255,0.06)" : "#f0f0f0", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${yesPct}%`, borderRadius: 3, background: `linear-gradient(90deg,${t.yes}80,${t.yes})`, transition: "width .8s ease" }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+              <span style={{ fontSize: 10, color: t.muted }}>{post._count?.votes || 0} callers</span>
+              {post.endsAt && <span style={{ fontSize: 10, color: t.muted }}>ends {timeAgo(post.endsAt)}</span>}
             </div>
           </div>
         )}
 
         {/* Action row */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            {post.type === "MARKET" && (
-              <span style={{ fontSize: 11, color: t.muted }}>
-                <span style={{ color: t.textSub, fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>
-                  ${post.volume}
-                </span>{" "}vol
-              </span>
-            )}
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {post.signal && (
-              <button
-                onClick={() => setExpanded((v) => !v)}
-                style={{ fontSize: 11, color: t.accent, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, padding: 0 }}
-              >
-                {expanded ? "▲ signal" : "▼ signal"}
+              <button onClick={() => setSigOpen(v => !v)} style={{ fontSize: 11, color: t.accent, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, padding: 0 }}>
+                {sigOpen ? "▲" : "▼"} signal
+              </button>
+            )}
+            {notableRepliesArray.length > 0 && (
+              <button onClick={() => setRepliesOpen(v => !v)} style={{ fontSize: 11, color: t.muted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, padding: 0 }}>
+                {repliesOpen ? "▲" : "▼"} CT takes
               </button>
             )}
           </div>
 
-          {/* Vote buttons — markets only */}
+          {/* Vote buttons */}
           {post.type === "MARKET" && (
             !localVote ? (
               <div style={{ display: "flex", gap: 6 }}>
-                <button
-                  onClick={() => handleVote("yes")}
-                  disabled={!session?.user || voting}
-                  className="vote-btn"
-                  style={{
-                    padding: "5px 16px", borderRadius: 8,
-                    border: `1.5px solid ${t.yes}35`,
-                    background: t.yesDim, color: t.yes,
-                    fontSize: 11, fontWeight: 700,
-                    cursor: session?.user ? "pointer" : "not-allowed",
-                    fontFamily: "inherit", letterSpacing: 1, textTransform: "uppercase",
-                    opacity: session?.user ? 1 : 0.5,
-                    transition: "filter .15s, transform .1s",
-                  }}
-                >Yes</button>
-                <button
-                  onClick={() => handleVote("no")}
-                  disabled={!session?.user || voting}
-                  className="vote-btn"
-                  style={{
-                    padding: "5px 16px", borderRadius: 8,
-                    border: `1.5px solid ${t.no}35`,
-                    background: t.noDim, color: t.no,
-                    fontSize: 11, fontWeight: 700,
-                    cursor: session?.user ? "pointer" : "not-allowed",
-                    fontFamily: "inherit", letterSpacing: 1, textTransform: "uppercase",
-                    opacity: session?.user ? 1 : 0.5,
-                    transition: "filter .15s, transform .1s",
-                  }}
-                >No</button>
+                {(["yes", "no"] as const).map(s => (
+                  <button key={s} onClick={() => handleVote(s)} disabled={!session?.user || voting}
+                    style={{
+                      padding: "5px 18px", borderRadius: 8, fontWeight: 700, fontSize: 11,
+                      fontFamily: "inherit", textTransform: "uppercase", letterSpacing: 1,
+                      cursor: session?.user ? "pointer" : "not-allowed",
+                      opacity: session?.user ? 1 : 0.45,
+                      border: `1.5px solid ${s === "yes" ? t.yes : t.no}35`,
+                      background: s === "yes" ? t.yesDim : t.noDim,
+                      color: s === "yes" ? t.yes : t.no,
+                      transition: "filter .15s, transform .1s",
+                    }}>{s}</button>
+                ))}
               </div>
             ) : (
-              <span style={{ fontSize: 11, color: t.muted, fontFamily: "'JetBrains Mono', monospace" }}>
-                call locked ✓
-              </span>
+              <span style={{ fontSize: 11, color: t.muted, fontFamily: "'JetBrains Mono', monospace" }}>called {localVote} ✓</span>
             )
           )}
 
-          {/* Reaction for takes/convos/events */}
           {post.type !== "MARKET" && session?.user && (
-            <button style={{
-              padding: "5px 14px", borderRadius: 8,
-              border: `1.5px solid ${isDark ? "rgba(255,255,255,0.1)" : "#e8e8e8"}`,
-              background: "transparent", color: t.muted,
-              fontSize: 11, fontWeight: 600, cursor: "pointer",
-              fontFamily: "inherit",
-            }}>
+            <button style={{ padding: "5px 14px", borderRadius: 8, border: `1.5px solid ${t.border}`, background: "transparent", color: t.muted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
               {post.type === "CONVERSATION" ? "Join" : post.type === "EVENT" ? "Attend" : "React"}
             </button>
           )}
         </div>
       </div>
 
-      {/* ── Signal panel ── */}
-      {expanded && post.signal && (
-        <div style={{
-          padding: "11px 16px",
-          borderTop: `1px solid ${t.border}`,
-          background: t.signalBg,
-          animation: "fadeUp .2s ease",
-        }}>
-          <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>
-            🧠 CT Signal
-          </div>
+      {/* Signal panel */}
+      {sigOpen && post.signal && (
+        <div style={{ padding: "10px 16px", borderTop: `1px solid ${t.border}`, background: t.signalBg, animation: "fadeUp .2s ease" }}>
+          <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>🧠 CT Signal</div>
           <p style={{ fontSize: 12, color: t.textSub, lineHeight: 1.65, margin: 0 }}>{post.signal}</p>
         </div>
       )}
 
-      {/* ── Footer: Share + Comments ── */}
-      <div style={{
-        padding: "10px 16px",
-        borderTop: `1px solid ${t.border}`,
-        background: t.footerBg,
-      }}>
-        {/* Share row */}
+      {/* Notable CT takes panel */}
+      {repliesOpen && notableRepliesArray.length > 0 && (
+        <div style={{ padding: "12px 16px", borderTop: `1px solid ${t.border}`, background: t.repliesBg, animation: "fadeUp .2s ease" }}>
+          <div style={{ fontSize: 10, color: t.muted, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>💬 Notable CT Takes</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {notableRepliesArray.map((reply, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <div style={{ width: 4, height: 4, borderRadius: "50%", background: t.accent, flexShrink: 0, marginTop: 6 }} />
+                <p style={{ fontSize: 12, color: t.textSub, lineHeight: 1.6, margin: 0 }}>{reply}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Footer: share + comments */}
+      <div style={{ padding: "10px 16px", borderTop: `1px solid ${t.border}`, background: t.footerBg }}>
         <div style={{ marginBottom: 10 }}>
           <ShareButton post={post} />
         </div>
-
-        {/* Comments */}
-        <Comments
-          postId={post.id}
-          initialCount={post._count?.comments || 0}
-        />
+        <Comments postId={post.id} initialCount={post._count?.comments || 0} />
       </div>
     </div>
   );

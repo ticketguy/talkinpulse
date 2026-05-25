@@ -27,21 +27,22 @@ model User {
 }
 
 model Post {
-  id        String    @id @default(cuid())
-  type      PostType
-  title     String
-  body      String?
-  signal    String?
-  category  String    @default("Meta")
-  endsAt    DateTime?
-  yesCount  Int       @default(0)
-  noCount   Int       @default(0)
-  hot       Boolean   @default(false)
-  volume    String    @default("0K")
-  authorId  String?
-  isAiGen   Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  type           PostType
+  title          String
+  body           String?
+  signal         String?
+  category       String    @default("Meta")
+  endsAt         DateTime?
+  yesCount       Int       @default(0)
+  noCount        Int       @default(0)
+  hot            Boolean   @default(false)
+  originator     String?
+  notableReplies String?
+  authorId       String?
+  isAiGen        Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   author   User?     @relation(fields: [authorId], references: [id])
   votes    Vote[]

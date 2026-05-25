@@ -1,13 +1,8 @@
 export type PostType = "MARKET" | "TAKE" | "CONVERSATION" | "EVENT";
 
 export type Category =
-  | "Narrative"
-  | "Founder"
-  | "Collection"
-  | "Meta"
-  | "Alpha"
-  | "Event"
-  | "Debate";
+  | "Narrative" | "Founder" | "Collection"
+  | "Meta" | "Alpha" | "Event" | "Debate";
 
 export interface User {
   id: string;
@@ -31,7 +26,8 @@ export interface Post {
   yesCount: number;
   noCount: number;
   hot: boolean;
-  volume: string;
+  originator?: string | null;
+  notableReplies?: string | null;
   isAiGen: boolean;
   createdAt: string;
   author?: User | null;
@@ -56,5 +52,4 @@ export interface Comment {
 }
 
 export type FeedFilter = "all" | "hot" | "new" | "markets" | "takes" | "events" | "conversations";
-
 export type Theme = "dark" | "light";
