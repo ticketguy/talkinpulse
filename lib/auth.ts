@@ -2,8 +2,13 @@ import NextAuth from "next-auth";
 import TwitterProvider from "next-auth/providers/twitter";
 import { prisma } from "@/lib/prisma";
 
+// Auth.js reads AUTH_URL / NEXTAUTH_URL at init. A missing scheme (or empty string)
+// throws TypeError: Invalid URL on Vercel.
+const rawAuthUrl = (process.env.AUTH_URL || process.env.NEXTAUTH_URL || "https://talkinpulse.vercel.app").trim();
+process.env.AUTH_URL = rawAuthUrl.startsWith("http") ? rawAuthUrl : `https://${rawAuthUrl}`;
+process.env.NEXTAUTH_URL = process.env.AUTH_URL;
+
 async function determineRepLevel(xProfile: any): Promise<string> {
-  // AI-free heuristic from X profile data
   const followersCount = xProfile?.public_metrics?.followers_count || xProfile?.followers_count || 0;
   const tweetCount = xProfile?.public_metrics?.tweet_count || xProfile?.statuses_count || 0;
   const bio = (xProfile?.description || xProfile?.bio || "").toLowerCase();
@@ -60,7 +65,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               },
             });
 
-            // Record signup bonus transaction
             await prisma.pointTransaction.create({
               data: {
                 userId: newUser.id,
@@ -70,7 +74,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               },
             });
           } else {
-            // Update profile on each login
             await prisma.user.update({
               where: { xId },
               data: { displayName, imageUrl, bio, xProfileData: xProfile.data || xProfile },
