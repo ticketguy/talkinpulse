@@ -2,8 +2,6 @@ import NextAuth from "next-auth";
 import TwitterProvider from "next-auth/providers/twitter";
 import { prisma } from "@/lib/prisma";
 
-// Auth.js reads AUTH_URL / NEXTAUTH_URL at init. A missing scheme (or empty string)
-// throws TypeError: Invalid URL on Vercel.
 const rawAuthUrl = (process.env.AUTH_URL || process.env.NEXTAUTH_URL || "https://talkinpulse.vercel.app").trim();
 process.env.AUTH_URL = rawAuthUrl.startsWith("http") ? rawAuthUrl : `https://${rawAuthUrl}`;
 process.env.NEXTAUTH_URL = process.env.AUTH_URL;
@@ -32,6 +30,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.TWITTER_CLIENT_ID!,
       clientSecret: process.env.TWITTER_CLIENT_SECRET!,
       authorization: {
+        url: "https://twitter.com/i/oauth2/authorize",
         params: { scope: "tweet.read tweet.write users.read offline.access" },
       },
     }),
