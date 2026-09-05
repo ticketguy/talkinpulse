@@ -55,13 +55,26 @@ async function fetchLiveCryptoTopics(): Promise<TavilyResult[]> {
   }
 }
 
+function extractContent(completion: any): string | null {
+  const fromChoices = completion?.choices?.[0]?.message?.content;
+  if (typeof fromChoices === "string" && fromChoices.trim()) return fromChoices;
+  if (typeof completion?.output_text === "string" && completion.output_text.trim()) return completion.output_text;
+  if (typeof completion?.content === "string" && completion.content.trim()) return completion.content;
+  const parts = completion?.choices?.[0]?.message?.content;
+  if (Array.isArray(parts)) {
+    const text = parts.map((p: any) => p?.text || p?.content || "").join("").trim();
+    if (text) return text;
+  }
+  console.error("AgentRouter unexpected payload keys:", completion && Object.keys(completion));
+  return null;
+}
+
 export async function generatePost(): Promise<GeneratedPost | null> {
   const rand = Math.random();
   const type: PostType = rand < 0.40 ? "MARKET" : rand < 0.65 ? "TAKE" : rand < 0.85 ? "CONVERSATION" : "EVENT";
 
   const liveResults = await fetchLiveCryptoTopics();
-  const hasLive = liveResults.length > 0;
-  const source = hasLive ? liveResults[Math.floor(Math.random() * liveResults.length)] : null;
+  const source = liveResults.length > 0 ? liveResults[Math.floor(Math.random() * liveResults.length)] : null;
 
   const topicContext = source
     ? `Based on this real article:\nTitle: ${source.title}\nURL: ${source.url}\nContent: ${source.content}`
@@ -80,7 +93,6 @@ export async function generatePost(): Promise<GeneratedPost | null> {
       model: MODEL,
       temperature: 0.85,
       max_tokens: 700,
-      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompts[type] },
         { role: "user", content: topicContext },
@@ -88,9 +100,10 @@ export async function generatePost(): Promise<GeneratedPost | null> {
     });
     console.log(`AgentRouter latency ${Date.now() - started}ms model=${MODEL} type=${type}`);
 
-    const raw = completion.choices[0]?.message?.content;
+    const raw = extractContent(completion);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean);
 
     const endsInDays = Math.min(parsed.endsInDays || 7, 14);
     const endsAt = type === "MARKET" ? new Date(Date.now() + endsInDays * 86400000) : undefined;
@@ -111,10 +124,7 @@ export async function generatePost(): Promise<GeneratedPost | null> {
     };
   } catch (e: any) {
     console.error(`AgentRouter failed after ${Date.now() - started}ms`, e?.status || e?.message);
-    if (e?.status === 429) {
-      console.log("OpenAI rate limited");
-      return null;
-    }
+    if (e?.status === 429) return null;
     console.error("Generation failed:", e);
     return null;
   }
