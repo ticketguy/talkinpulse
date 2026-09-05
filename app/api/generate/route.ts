@@ -4,11 +4,19 @@ import { generatePost } from "@/lib/generate";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  if (
-    process.env.NODE_ENV === "production" &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
+  const querySecret = req.nextUrl.searchParams.get("secret");
+  const cronSecret = process.env.CRON_SECRET;
+  const authorized =
+    process.env.NODE_ENV !== "production" ||
+    (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
+    (cronSecret && querySecret === cronSecret);
+
+  if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json({ error: "OPENAI_API_KEY missing" }, { status: 500 });
   }
 
   try {
@@ -28,6 +36,7 @@ export async function GET(req: NextRequest) {
         hot: generated.hot,
         originator: generated.originator || null,
         notableReplies: generated.notableReplies || null,
+        sourceUrl: generated.sourceUrl || null,
         yesCount: generated.yesCount || 50,
         noCount: generated.noCount || 50,
         isAiGen: true,
