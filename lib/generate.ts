@@ -1,11 +1,7 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 import { Category, PostType } from "@/types";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
-const geminiModel = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash-lite",
-  generationConfig: { temperature: 0.85, maxOutputTokens: 700, responseMimeType: "application/json" },
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export interface GeneratedPost {
   type: PostType;
@@ -112,13 +108,21 @@ Generate a CT event post based ONLY on the provided real source. Respond ONLY wi
   };
 
   try {
-    const fullPrompt = `${systemPrompts[type]}\n\n${topicContext}`;
-    const result = await geminiModel.generateContent(fullPrompt);
-    const raw = result.response.text();
-    const clean = raw.replace(/```json|```/g, "").trim();
-    const parsed = JSON.parse(clean);
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.85,
+      max_tokens: 700,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompts[type] },
+        { role: "user", content: topicContext },
+      ],
+    });
 
-    // Enforce max 14 days
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+
     const endsInDays = Math.min(parsed.endsInDays || 7, 14);
     const endsAt = type === "MARKET" ? new Date(Date.now() + endsInDays * 86400000) : undefined;
 
@@ -137,7 +141,10 @@ Generate a CT event post based ONLY on the provided real source. Respond ONLY wi
       noCount: parsed.yesCount ? 100 - parsed.yesCount : 50,
     };
   } catch (e: any) {
-    if (e?.status === 429) { console.log("Gemini rate limited"); return null; }
+    if (e?.status === 429) {
+      console.log("OpenAI rate limited");
+      return null;
+    }
     console.error("Generation failed:", e);
     return null;
   }
