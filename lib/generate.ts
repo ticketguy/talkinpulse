@@ -23,32 +23,51 @@ interface TavilyResult {
   url: string;
   content: string;
   score: number;
+  lane: "hot" | "quiet";
+}
+
+async function tavilySearch(key: string, query: string): Promise<any[]> {
+  const res = await fetch("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      api_key: key,
+      query,
+      search_depth: "basic",
+      max_results: 5,
+      topic: "finance",
+      days: 7,
+    }),
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.results || [];
 }
 
 async function fetchLiveCryptoTopics(): Promise<TavilyResult[]> {
   const key = process.env.TAVILY_API_KEY;
   if (!key) return [];
   try {
-    const queries = [
-      "crypto twitter trending narrative today",
-      "DeFi Solana Ethereum controversy debate 2026",
-      "NFT Web3 community discussion trending",
-      "crypto airdrop governance vote controversy",
-    ];
-    const query = queries[Math.floor(Math.random() * queries.length)];
-    const res = await fetch("https://api.tavily.com/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ api_key: key, query, search_depth: "basic", max_results: 5, topic: "finance" }),
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return (data.results || []).map((r: any) => ({
-      title: r.title,
-      url: r.url,
-      content: r.content?.slice(0, 300),
-      score: r.score,
-    }));
+    const [hotRaw, quietRaw] = await Promise.all([
+      tavilySearch(key, "trending crypto blockchain web3 news discussion today"),
+      tavilySearch(key, "underreported crypto blockchain protocol community not bitcoin ethereum"),
+    ]);
+    const seen = new Set<string>();
+    const out: TavilyResult[] = [];
+    const push = (r: any, lane: "hot" | "quiet") => {
+      if (!r?.url || seen.has(r.url)) return;
+      seen.add(r.url);
+      out.push({
+        title: r.title,
+        url: r.url,
+        content: r.content?.slice(0, 300),
+        score: r.score,
+        lane,
+      });
+    };
+    hotRaw.forEach((r) => push(r, "hot"));
+    quietRaw.forEach((r) => push(r, "quiet"));
+    return out;
   } catch (e) {
     console.error("Tavily error:", e);
     return [];
@@ -120,15 +139,19 @@ export async function generatePost(): Promise<GeneratedPost | null> {
   const type: PostType = rand < 0.40 ? "MARKET" : rand < 0.65 ? "TAKE" : rand < 0.85 ? "CONVERSATION" : "EVENT";
 
   const liveResults = await fetchLiveCryptoTopics();
-  const source = liveResults.length > 0 ? liveResults[Math.floor(Math.random() * liveResults.length)] : null;
+  const preferQuiet = Math.random() < 0.45;
+  const pool = preferQuiet
+    ? liveResults.filter((r) => r.lane === "quiet").concat(liveResults)
+    : liveResults.filter((r) => r.lane === "hot").concat(liveResults);
+  const source = pool.length > 0 ? pool[0] : liveResults[0] || null;
 
   const topicContext = source
-    ? `Based on this real article:\nTitle: ${source.title}\nURL: ${source.url}\nContent: ${source.content}`
-    : "Generate based on current crypto Twitter trends";
+    ? `Lane: ${source.lane === "hot" ? "hot / trending" : "undercovered / not dominating the timeline"}.\nBased on this real article:\nTitle: ${source.title}\nURL: ${source.url}\nContent: ${source.content}`
+    : "Generate based on current crypto and blockchain discussion. Mix well-known and undercovered topics.";
 
   const systemPrompts: Record<PostType, string> = {
     MARKET: `You are TalkinPulse's market engine for Crypto Twitter.
-Generate a CT prediction market based ONLY on the provided real source. Respond ONLY with valid JSON:
+Generate a CT prediction market based ONLY on the provided real source. Cover crypto, blockchain, web3 broadly — both loud narratives and quieter ones. Respond ONLY with valid JSON:
 {
   "title": "sharp yes/no question max 90 chars based on the real topic",
   "signal": "1-2 sentences of what the source suggests about sentiment/outcome",
@@ -140,7 +163,7 @@ Generate a CT prediction market based ONLY on the provided real source. Respond 
   "notableReplies": "2-3 CT perspectives separated by |"
 }`,
     TAKE: `You are TalkinPulse's take engine for Crypto Twitter.
-Generate a CT take based ONLY on the provided real source. Respond ONLY with valid JSON:
+Generate a CT take based ONLY on the provided real source. Cover crypto, blockchain, web3 broadly. Respond ONLY with valid JSON:
 {
   "title": "bold take headline max 80 chars directly about the real topic",
   "body": "2-3 sentences expanding the take in CT voice based on the real content",
@@ -150,7 +173,7 @@ Generate a CT take based ONLY on the provided real source. Respond ONLY with val
   "notableReplies": "2-3 CT responses separated by |"
 }`,
     CONVERSATION: `You are TalkinPulse's conversation engine for Crypto Twitter.
-Generate a CT debate prompt based ONLY on the provided real source. Respond ONLY with valid JSON:
+Generate a CT debate prompt based ONLY on the provided real source. Cover crypto, blockchain, web3 broadly. Respond ONLY with valid JSON:
 {
   "title": "debate question based on the real topic max 90 chars",
   "body": "1-2 sentences of context from the real content",
@@ -160,7 +183,7 @@ Generate a CT debate prompt based ONLY on the provided real source. Respond ONLY
   "notableReplies": "2-3 CT perspectives from different sides separated by |"
 }`,
     EVENT: `You are TalkinPulse's event engine for Crypto Twitter.
-Generate a CT event post based ONLY on the provided real source. Respond ONLY with valid JSON:
+Generate a CT event post based ONLY on the provided real source. Cover crypto, blockchain, web3 broadly. Respond ONLY with valid JSON:
 {
   "title": "specific event title max 80 chars based on the real news",
   "body": "1-2 sentences about what's actually happening",
@@ -191,7 +214,7 @@ Generate a CT event post based ONLY on the provided real source. Respond ONLY wi
       signal: parsed.signal,
       category: parsed.category || "Meta",
       endsAt,
-      hot: parsed.hot ?? false,
+      hot: source?.lane === "hot" ? parsed.hot ?? true : parsed.hot ?? false,
       originator: parsed.originator || undefined,
       notableReplies: parsed.notableReplies || undefined,
       sourceUrl: source?.url || undefined,
