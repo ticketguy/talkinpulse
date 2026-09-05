@@ -1,6 +1,6 @@
 import { Category, PostType } from "@/types";
 
-const BASE = process.env.OPENAI_BASE_URL || "https://agentrouter.org/v1";
+const BASE = process.env.OPENAI_BASE_URL || "https://co.agentrouter.org/v1";
 const MODEL = process.env.OPENAI_MODEL || "gpt-5.6-sol";
 
 export interface GeneratedPost {
