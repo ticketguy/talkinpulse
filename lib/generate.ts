@@ -3,10 +3,10 @@ import { Category, PostType } from "@/types";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  baseURL: process.env.OPENAI_BASE_URL || undefined,
+  baseURL: process.env.OPENAI_BASE_URL || "https://agentrouter.org/v1",
 });
 
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const MODEL = process.env.OPENAI_MODEL || "gpt-5.6-sol";
 
 export interface GeneratedPost {
   type: PostType;
@@ -68,48 +68,10 @@ export async function generatePost(): Promise<GeneratedPost | null> {
     : "Generate based on current crypto Twitter trends";
 
   const systemPrompts: Record<PostType, string> = {
-    MARKET: `You are TalkinPulse's market engine for Crypto Twitter.
-Generate a CT prediction market based ONLY on the provided real source. Respond ONLY with valid JSON:
-{
-  "title": "sharp yes/no question max 90 chars based on the real topic",
-  "signal": "1-2 sentences of what the source suggests about sentiment/outcome",
-  "category": one of ["Narrative","Founder","Collection","Meta","Alpha"],
-  "yesCount": integer 20-80,
-  "endsInDays": integer between 1 and 14,
-  "hot": true or false,
-  "originator": "X handle of who likely started this discussion e.g. @cobie",
-  "notableReplies": "2-3 CT perspectives separated by |"
-}`,
-    TAKE: `You are TalkinPulse's take engine for Crypto Twitter.
-Generate a CT take based ONLY on the provided real source. Respond ONLY with valid JSON:
-{
-  "title": "bold take headline max 80 chars directly about the real topic",
-  "body": "2-3 sentences expanding the take in CT voice based on the real content",
-  "category": one of ["Narrative","Meta","Founder","Alpha"],
-  "hot": true or false,
-  "originator": "X handle of who would likely post this take",
-  "notableReplies": "2-3 CT responses separated by |"
-}`,
-    CONVERSATION: `You are TalkinPulse's conversation engine for Crypto Twitter.
-Generate a CT debate prompt based ONLY on the provided real source. Respond ONLY with valid JSON:
-{
-  "title": "debate question based on the real topic max 90 chars",
-  "body": "1-2 sentences of context from the real content",
-  "category": one of ["Narrative","Meta","Founder","Collection","Alpha","Debate"],
-  "hot": true or false,
-  "originator": "X handle who likely started this debate",
-  "notableReplies": "2-3 CT perspectives from different sides separated by |"
-}`,
-    EVENT: `You are TalkinPulse's event engine for Crypto Twitter.
-Generate a CT event post based ONLY on the provided real source. Respond ONLY with valid JSON:
-{
-  "title": "specific event title max 80 chars based on the real news",
-  "body": "1-2 sentences about what's actually happening",
-  "category": one of ["Narrative","Meta","Collection","Alpha","Event"],
-  "hot": true or false,
-  "originator": "X handle or project account tied to this event",
-  "notableReplies": "2-3 CT reactions separated by |"
-}`,
+    MARKET: `You are TalkinPulse's market engine for Crypto Twitter.\nGenerate a CT prediction market based ONLY on the provided real source. Respond ONLY with valid JSON:\n{\n  "title": "sharp yes/no question max 90 chars based on the real topic",\n  "signal": "1-2 sentences of what the source suggests about sentiment/outcome",\n  "category": one of ["Narrative","Founder","Collection","Meta","Alpha"],\n  "yesCount": integer 20-80,\n  "endsInDays": integer between 1 and 14,\n  "hot": true or false,\n  "originator": "X handle of who likely started this discussion e.g. @cobie",\n  "notableReplies": "2-3 CT perspectives separated by |"\n}`,
+    TAKE: `You are TalkinPulse's take engine for Crypto Twitter.\nGenerate a CT take based ONLY on the provided real source. Respond ONLY with valid JSON:\n{\n  "title": "bold take headline max 80 chars directly about the real topic",\n  "body": "2-3 sentences expanding the take in CT voice based on the real content",\n  "category": one of ["Narrative","Meta","Founder","Alpha"],\n  "hot": true or false,\n  "originator": "X handle of who would likely post this take",\n  "notableReplies": "2-3 CT responses separated by |"\n}`,
+    CONVERSATION: `You are TalkinPulse's conversation engine for Crypto Twitter.\nGenerate a CT debate prompt based ONLY on the provided real source. Respond ONLY with valid JSON:\n{\n  "title": "debate question based on the real topic max 90 chars",\n  "body": "1-2 sentences of context from the real content",\n  "category": one of ["Narrative","Meta","Founder","Collection","Alpha","Debate"],\n  "hot": true or false,\n  "originator": "X handle who likely started this debate",\n  "notableReplies": "2-3 CT perspectives from different sides separated by |"\n}`,
+    EVENT: `You are TalkinPulse's event engine for Crypto Twitter.\nGenerate a CT event post based ONLY on the provided real source. Respond ONLY with valid JSON:\n{\n  "title": "specific event title max 80 chars based on the real news",\n  "body": "1-2 sentences about what's actually happening",\n  "category": one of ["Narrative","Meta","Collection","Alpha","Event"],\n  "hot": true or false,\n  "originator": "X handle or project account tied to this event",\n  "notableReplies": "2-3 CT reactions separated by |"\n}`,
   };
 
   try {
