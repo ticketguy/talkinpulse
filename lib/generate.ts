@@ -1,6 +1,6 @@
 import { Category, PostType } from "@/types";
 
-const BASE = process.env.OPENAI_BASE_URL || "https://co.agentrouter.org/v1";
+const BASE = process.env.OPENAI_BASE_URL || "https://agentrouter.org/v1";
 const MODEL = process.env.OPENAI_MODEL || "gpt-5.6-sol";
 
 export interface GeneratedPost {
@@ -111,6 +111,10 @@ async function callAgentRouter(messages: { role: string; content: string }[]): P
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
+      Accept: "application/json",
+      Originator: "codex_cli_rs",
+      Version: "0.101.0",
+      "User-Agent": "codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464",
     },
     body: JSON.stringify({
       model: MODEL,
