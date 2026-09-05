@@ -5,14 +5,26 @@ import { generatePost } from "@/lib/generate";
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const querySecret = req.nextUrl.searchParams.get("secret");
-  const cronSecret = process.env.CRON_SECRET;
-  const authorized =
-    process.env.NODE_ENV !== "production" ||
-    (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
-    (cronSecret && querySecret === cronSecret);
+  const expected =
+    process.env.CRON_SECRET ||
+    process.env.AUTH_SECRET ||
+    process.env.NEXTAUTH_SECRET;
 
-  if (!authorized) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (process.env.NODE_ENV === "production") {
+    if (!expected) {
+      return NextResponse.json(
+        { error: "Set CRON_SECRET or AUTH_SECRET on Vercel" },
+        { status: 500 }
+      );
+    }
+    const bearerOk = authHeader === `Bearer ${expected}`;
+    const queryOk = querySecret === expected;
+    if (!bearerOk && !queryOk) {
+      return NextResponse.json(
+        { error: "Pass ?secret=YOUR_CRON_SECRET_OR_AUTH_SECRET" },
+        { status: 401 }
+      );
+    }
   }
 
   if (!process.env.OPENAI_API_KEY) {
