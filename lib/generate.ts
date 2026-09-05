@@ -74,6 +74,7 @@ export async function generatePost(): Promise<GeneratedPost | null> {
     EVENT: `You are TalkinPulse's event engine for Crypto Twitter.\nGenerate a CT event post based ONLY on the provided real source. Respond ONLY with valid JSON:\n{\n  "title": "specific event title max 80 chars based on the real news",\n  "body": "1-2 sentences about what's actually happening",\n  "category": one of ["Narrative","Meta","Collection","Alpha","Event"],\n  "hot": true or false,\n  "originator": "X handle or project account tied to this event",\n  "notableReplies": "2-3 CT reactions separated by |"\n}`,
   };
 
+  const started = Date.now();
   try {
     const completion = await openai.chat.completions.create({
       model: MODEL,
@@ -85,6 +86,7 @@ export async function generatePost(): Promise<GeneratedPost | null> {
         { role: "user", content: topicContext },
       ],
     });
+    console.log(`AgentRouter latency ${Date.now() - started}ms model=${MODEL} type=${type}`);
 
     const raw = completion.choices[0]?.message?.content;
     if (!raw) return null;
@@ -108,6 +110,7 @@ export async function generatePost(): Promise<GeneratedPost | null> {
       noCount: parsed.yesCount ? 100 - parsed.yesCount : 50,
     };
   } catch (e: any) {
+    console.error(`AgentRouter failed after ${Date.now() - started}ms`, e?.status || e?.message);
     if (e?.status === 429) {
       console.log("OpenAI rate limited");
       return null;
