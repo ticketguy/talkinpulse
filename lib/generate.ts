@@ -1,7 +1,12 @@
 import OpenAI from "openai";
 import { Category, PostType } from "@/types";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.OPENAI_BASE_URL || undefined,
+});
+
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 export interface GeneratedPost {
   type: PostType;
@@ -109,7 +114,7 @@ Generate a CT event post based ONLY on the provided real source. Respond ONLY wi
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: MODEL,
       temperature: 0.85,
       max_tokens: 700,
       response_format: { type: "json_object" },
