@@ -34,8 +34,7 @@ export function Header() {
         display: "flex", alignItems: "center",
         height: 58, gap: 12,
       }}>
-        {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
+        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0, textDecoration: "none", color: "inherit" }}>
           <div style={{
             width: 28, height: 28, borderRadius: 7, background: t.accent,
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -57,9 +56,8 @@ export function Header() {
               CT Intelligence
             </div>
           </div>
-        </div>
+        </Link>
 
-        {/* Desktop nav */}
         <nav className="desktop-nav" style={{ display: "flex", gap: 2, marginLeft: 12 }}>
           {[
             { id: "feed", label: "Feed" },
@@ -76,26 +74,25 @@ export function Header() {
                 fontSize: 12, fontWeight: activeTab === n.id ? 700 : 500,
                 cursor: "pointer", fontFamily: "inherit",
                 borderBottom: activeTab === n.id ? `2px solid ${t.accent}` : "2px solid transparent",
-                transition: "all .15s",
               }}
             >{n.label}</button>
           ))}
+          <Link href="/summary" style={{
+            padding: "6px 13px", borderRadius: 8, textDecoration: "none",
+            color: t.muted, fontSize: 12, fontWeight: 500,
+          }}>Day</Link>
         </nav>
 
-        {/* Right */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Theme */}
           <button
             onClick={toggleTheme}
             style={{
               width: 30, height: 30, borderRadius: 8,
               border: `1px solid ${t.border}`, background: t.surface,
               color: t.muted, fontSize: 13, cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
             }}
           >{isDark ? "☀" : "🌙"}</button>
 
-          {/* Auth */}
           {status === "loading" ? (
             <div style={{ width: 28, height: 28, borderRadius: "50%", background: t.surface, border: `1px solid ${t.border}` }} />
           ) : !session ? (
@@ -105,16 +102,9 @@ export function Header() {
                 padding: "7px 14px", borderRadius: 9,
                 background: t.accent, border: "none", color: "#fff",
                 fontSize: 11, fontWeight: 700, cursor: "pointer",
-                fontFamily: "inherit", letterSpacing: 0.4,
-                display: "flex", alignItems: "center", gap: 6,
-                boxShadow: "0 2px 10px rgba(224,28,28,0.35)",
+                fontFamily: "inherit",
               }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.741l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.912-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-              Connect X
-            </button>
+            >Connect X</button>
           ) : (
             <div
               style={{
@@ -126,18 +116,10 @@ export function Header() {
               onClick={() => signOut()}
               title="Sign out"
             >
-              <Avatar
-                username={user?.username || user?.name || "user"}
-                imageUrl={user?.image}
-                size={22}
-              />
+              <Avatar username={user?.username || user?.name || "user"} imageUrl={user?.image} size={22} />
               <span className="hide-mobile" style={{ fontSize: 11, color: t.text, fontWeight: 600 }}>
                 @{user?.username || user?.name}
               </span>
-              <span className="hide-mobile" style={{ fontSize: 10, color: "#f59e0b", fontWeight: 700, fontFamily: "monospace" }}>
-                {user?.talkinPoints || 100}TP
-              </span>
-              <span style={{ fontSize: 8, color: t.muted }}>▼</span>
             </div>
           )}
         </div>
