@@ -1,5 +1,18 @@
 export type PostType = "MARKET" | "TAKE" | "CONVERSATION" | "EVENT";
-export type Category = "Narrative" | "Founder" | "Collection" | "Meta" | "Alpha" | "Event" | "Debate";
+export type Category =
+  | "Narrative"
+  | "Founder"
+  | "Collection"
+  | "Meta"
+  | "Alpha"
+  | "Event"
+  | "Debate"
+  | "Trending"
+  | "Hot"
+  | "Opinion"
+  | "Convo"
+  | "Divide"
+  | "LittleCooker";
 export type RepLevel = "NEW_WEB3" | "WEB3_ASSOCIATE" | "CALLER" | "SIGNAL_CALLER" | "VERIFIED_VOICE" | "CT_ORACLE";
 export type AdminRole = "SUPER_ADMIN" | "MODERATOR" | "POINTS_MANAGER" | "READ_ONLY";
 
@@ -98,5 +111,16 @@ export interface PointTransaction {
   createdAt: string;
 }
 
-export type FeedFilter = "all" | "hot" | "new" | "markets" | "takes" | "events" | "conversations";
+export type FeedFilter =
+  | "all"
+  | "hot"
+  | "new"
+  | "markets"
+  | "takes"
+  | "events"
+  | "conversations"
+  | "trending"
+  | "opinion"
+  | "divide"
+  | "cooker";
 export type Theme = "dark" | "light";
