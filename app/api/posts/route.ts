@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { getSessionSafe, requireUserId } from "@/lib/session";
 import { FeedFilter } from "@/types";
+import { isHttpUrl } from "@/lib/x";
 
 function startOfToday() {
   const d = new Date();
@@ -10,7 +11,7 @@ function startOfToday() {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
+  const session = await getSessionSafe();
   const { searchParams } = new URL(req.url);
   const filter = (searchParams.get("filter") || "all") as FeedFilter;
   const rank = searchParams.get("rank") || "24h";
@@ -29,11 +30,7 @@ export async function GET(req: NextRequest) {
     };
 
     const where: any = { AND: [freshness] };
-
-    if (since) {
-      where.AND.push({ createdAt: { gt: new Date(since) } });
-    }
-
+    if (since) where.AND.push({ createdAt: { gt: new Date(since) } });
     if (filter === "news") where.AND.push({ type: { not: "MARKET" } });
     if (filter === "hot") where.AND.push({ OR: [{ hot: true }, { category: "Hot" }] });
     if (filter === "trending") where.AND.push({ category: "Trending" });
@@ -53,14 +50,14 @@ export async function GET(req: NextRequest) {
         "30d": 30 * 24 * 60 * 60 * 1000,
         "1y": 365 * 24 * 60 * 60 * 1000,
       };
-      const ms = periodMap[rank] || periodMap["24h"];
-      where.AND.push({ createdAt: { gte: new Date(Date.now() - ms) } });
+      where.AND.push({ createdAt: { gte: new Date(Date.now() - (periodMap[rank] || periodMap["24h"])) } });
     }
 
     const orderBy: any = filter === "takes"
       ? [{ votes: { _count: "desc" } }, { createdAt: "desc" }]
       : [{ hot: "desc" }, { createdAt: "desc" }];
 
+    const userId = (session?.user as any)?.id;
     const posts = await prisma.post.findMany({
       where,
       take: take + 1,
@@ -71,9 +68,7 @@ export async function GET(req: NextRequest) {
           select: { id: true, username: true, displayName: true, imageUrl: true, repScore: true, xId: true },
         },
         _count: { select: { comments: true, votes: true } },
-        ...(session?.user
-          ? { votes: { where: { userId: (session.user as any).id }, select: { side: true } } }
-          : {}),
+        ...(userId ? { votes: { where: { userId }, select: { side: true } } } : {}),
       },
     });
 
@@ -99,13 +94,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const gate = await requireUserId("Unauthorized");
+  if (gate.error || !gate.userId) return gate.error!;
 
   try {
     const body = await req.json();
-    const { type, title, body: postBody, category, endsAt } = body;
+    const { type, title, body: postBody, category, endsAt, sourceUrl } = body;
     if (!type || !title) return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    if (!isHttpUrl(sourceUrl)) return NextResponse.json({ error: "sourceUrl required" }, { status: 400 });
 
     const post = await prisma.post.create({
       data: {
@@ -113,8 +109,9 @@ export async function POST(req: NextRequest) {
         title: title.slice(0, 280),
         body: postBody?.slice(0, 1000),
         category: category || "Meta",
-        endsAt: endsAt ? new Date(endsAt) : null,
-        authorId: (session.user as any).id,
+        endsAt: type === "MARKET" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : endsAt ? new Date(endsAt) : null,
+        sourceUrl,
+        authorId: gate.userId,
         isAiGen: false,
         yesCount: type === "MARKET" ? 50 : 0,
         noCount: type === "MARKET" ? 50 : 0,
