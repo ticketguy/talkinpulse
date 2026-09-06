@@ -14,7 +14,6 @@ export interface GeneratedPost {
   endsAt?: Date;
   hot: boolean;
   originator?: string;
-  notableReplies?: string;
   sourceUrl?: string;
   yesCount?: number;
   noCount?: number;
@@ -56,7 +55,7 @@ async function tavilySearch(key: string, query: string, includeDomains?: string[
     query,
     search_depth: "basic",
     max_results: 5,
-    days: 7,
+    days: 1,
   };
   if (includeDomains?.length) body.include_domains = includeDomains;
   else body.topic = "finance";
@@ -77,9 +76,9 @@ async function fetchLiveCryptoTopics(): Promise<TavilyResult[]> {
     const xDomains = ["x.com", "twitter.com"];
     const [newsHot, newsQuiet, ctHot, ctQuiet] = await Promise.all([
       tavilySearch(key, "crypto blockchain web3 news today"),
-      tavilySearch(key, "underreported crypto blockchain protocol not bitcoin ethereum"),
-      tavilySearch(key, "crypto twitter trending argument take debate launch", xDomains),
-      tavilySearch(key, "crypto twitter overlooked but important opinion governance event", xDomains),
+      tavilySearch(key, "underreported crypto blockchain protocol today"),
+      tavilySearch(key, "crypto twitter trending argument take debate launch today", xDomains),
+      tavilySearch(key, "crypto twitter opinion governance event today", xDomains),
     ]);
     const seen = new Set<string>();
     const out: TavilyResult[] = [];
@@ -204,9 +203,17 @@ export async function interpretSource(input: {
   }
 }
 
+function classFromLane(lane?: string, type?: PostType): Category {
+  if (type === "CONVERSATION") return "Convo";
+  if (lane === "ct-hot" || lane === "news-hot") return "Trending";
+  if (lane === "ct-quiet") return "LittleCooker";
+  if (lane === "news-quiet") return "Opinion";
+  return "Meta";
+}
+
 export async function generatePost(): Promise<GeneratedPost | null> {
   const rand = Math.random();
-  const type: PostType = rand < 0.40 ? "MARKET" : rand < 0.65 ? "TAKE" : rand < 0.85 ? "CONVERSATION" : "EVENT";
+  const type: PostType = rand < 0.35 ? "EVENT" : rand < 0.55 ? "TAKE" : rand < 0.75 ? "CONVERSATION" : "MARKET";
 
   const liveResults = await fetchLiveCryptoTopics();
   const ct = liveResults.filter((r) => r.lane.startsWith("ct"));
@@ -218,79 +225,40 @@ export async function generatePost(): Promise<GeneratedPost | null> {
   const xHandle = handleFromXUrl(source?.url);
 
   const topicContext = source
-    ? `Source kind: ${fromX ? "Crypto Twitter post/thread" : "off-X news/blog"}.\nLane: ${source.lane}.\nTitle: ${source.title}\nURL: ${source.url}\nContent: ${source.content}\n${fromX ? `Known handle from URL: ${xHandle || "unknown"}. Only use a real handle from the URL. Do not invent handles.` : "Do NOT invent an X username. originator must be empty."}`
-    : "Generate from current crypto discussion. Do not invent X handles.";
+    ? `Source kind: ${fromX ? "Crypto Twitter" : "off-X news"}. Today only.\nLane: ${source.lane}.\nTitle: ${source.title}\nURL: ${source.url}\nContent: ${source.content}\n${fromX ? `Handle from URL: ${xHandle || "none"}` : "originator must be empty"}`
+    : "Generate from today's crypto discussion. No invented handles.";
 
-  const systemPrompts: Record<PostType, string> = {
-    MARKET: `You write TalkinPulse markets.
-If the source is off-X news, treat it as news-derived market, not a tweet.
+  const system = `You write TalkinPulse cards for TODAY only. No fake user takes. No invented X handles.
 Respond ONLY JSON:
 {
-  "title": "sharp yes/no question max 90 chars",
-  "signal": "1-2 sentences on sentiment/outcome",
-  "category": one of ["Narrative","Founder","Collection","Meta","Alpha"],
+  "title": "max 90 chars",
+  "body": "1-3 sentences",
+  "signal": "optional 1-2 sentences",
+  "category": one of ["Trending","Hot","Opinion","Convo","Divide","LittleCooker","Meta","Alpha"],
   "yesCount": integer 20-80,
   "endsInDays": integer 1-14,
-  "hot": true or false,
-  "originator": "X handle ONLY if source is x.com and handle is known, else empty string",
-  "notableReplies": "2-3 perspectives separated by |"
-}`,
-    TAKE: `You write TalkinPulse takes.
-Off-X news is not a personal take from a handle.
-Respond ONLY JSON:
-{
-  "title": "bold headline max 80 chars",
-  "body": "2-3 sentences",
-  "category": one of ["Narrative","Meta","Founder","Alpha"],
-  "hot": true or false,
-  "originator": "X handle ONLY if source is x.com, else empty",
-  "notableReplies": "2-3 perspectives separated by |"
-}`,
-    CONVERSATION: `You write TalkinPulse debate prompts.
-Respond ONLY JSON:
-{
-  "title": "debate question max 90 chars",
-  "body": "1-2 sentences of context",
-  "category": one of ["Narrative","Meta","Founder","Collection","Alpha","Debate"],
-  "hot": true or false,
-  "originator": "X handle ONLY if source is x.com, else empty",
-  "notableReplies": "2-3 sides separated by |"
-}`,
-    EVENT: `You write TalkinPulse event posts.
-Respond ONLY JSON:
-{
-  "title": "event title max 80 chars",
-  "body": "1-2 sentences",
-  "category": one of ["Narrative","Meta","Collection","Alpha","Event"],
-  "hot": true or false,
-  "originator": "X handle ONLY if source is x.com, else empty",
-  "notableReplies": "2-3 reactions separated by |"
-}`,
-  };
+  "hot": true or false
+}`;
 
   try {
     const raw = await callLLM([
-      { role: "system", content: systemPrompts[type] },
-      { role: "user", content: topicContext },
+      { role: "system", content: system },
+      { role: "user", content: `${topicContext}\nCard type: ${type}` },
     ]);
     if (!raw) return null;
     const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
     if (!parsed.title) return null;
-
-    const endsInDays = Math.min(parsed.endsInDays || 7, 14);
-    const originator = fromX ? xHandle || undefined : undefined;
-
+    const endsInDays = Math.min(parsed.endsInDays || 3, 14);
     return {
       type,
       title: parsed.title,
       body: parsed.body,
       signal: parsed.signal,
-      category: parsed.category || "Meta",
+      category: parsed.category || classFromLane(source?.lane, type),
       endsAt: type === "MARKET" ? new Date(Date.now() + endsInDays * 86400000) : undefined,
       hot: source?.lane.includes("hot") ? parsed.hot ?? true : parsed.hot ?? false,
-      originator,
-      notableReplies: parsed.notableReplies || undefined,
-      sourceUrl: source?.url || undefined,
+      originator: fromX ? xHandle : undefined,
+      sourceUrl: source?.url,
       yesCount: parsed.yesCount || 50,
       noCount: parsed.yesCount ? 100 - parsed.yesCount : 50,
     };
@@ -298,4 +266,27 @@ Respond ONLY JSON:
     console.error("Generation failed:", e);
     return null;
   }
+}
+
+export async function generateBatch(): Promise<GeneratedPost[]> {
+  const main = await generatePost();
+  if (!main) return [];
+  const out: GeneratedPost[] = [main];
+  if (main.type !== "MARKET") {
+    const q = main.title.includes("?") ? main.title : `Does this play out: ${main.title.slice(0, 70)}?`;
+    out.push({
+      type: "MARKET",
+      title: q.slice(0, 90),
+      body: main.body,
+      signal: main.signal || main.body,
+      category: main.category,
+      endsAt: new Date(Date.now() + 3 * 86400000),
+      hot: main.hot,
+      originator: main.originator,
+      sourceUrl: main.sourceUrl,
+      yesCount: 50,
+      noCount: 50,
+    });
+  }
+  return out;
 }
