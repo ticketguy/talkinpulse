@@ -1,7 +1,9 @@
 import { Category, PostType } from "@/types";
 
-const BASE = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-const MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+const GROQ_BASE = "https://api.groq.com/openai/v1";
+const GROQ_MODEL = process.env.GROQ_MODEL || "qwen/qwen3.8-27b";
+const OPENAI_BASE = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 
 export interface GeneratedPost {
   type: PostType;
@@ -84,10 +86,6 @@ function extractContent(payload: any): string | null {
         return trimmed;
       }
     }
-    if (trimmed.startsWith("<!" ) || trimmed.includes("aliyun_waf")) {
-      console.error("LLM returned HTML, not a completion");
-      return null;
-    }
     return trimmed || null;
   }
   const fromChoices = payload?.choices?.[0]?.message?.content;
@@ -102,37 +100,60 @@ function extractContent(payload: any): string | null {
   return null;
 }
 
-async function callLLM(messages: { role: string; content: string }[]): Promise<string | null> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key) return null;
+async function callChat(
+  label: string,
+  base: string,
+  key: string,
+  model: string,
+  messages: { role: string; content: string }[],
+  extra: Record<string, unknown> = {}
+): Promise<string | null> {
   const started = Date.now();
-  const res = await fetch(`${BASE.replace(/\/$/, "")}/chat/completions`, {
+  const res = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: MODEL,
-      temperature: 0.85,
-      max_tokens: 700,
+      model,
+      temperature: 0.7,
+      max_tokens: 800,
       response_format: { type: "json_object" },
       messages,
+      ...extra,
     }),
   });
   const text = await res.text();
-  console.log(`OpenAI latency ${Date.now() - started}ms status=${res.status} model=${MODEL} bytes=${text.length}`);
+  console.log(`${label} latency ${Date.now() - started}ms status=${res.status} model=${model} bytes=${text.length}`);
   if (!res.ok) {
-    console.error("OpenAI error body", text.slice(0, 300));
+    console.error(`${label} error body`, text.slice(0, 300));
     return null;
   }
   let parsed: any = text;
   try {
     parsed = JSON.parse(text);
   } catch {
-    /* keep raw text */
+    /* raw */
   }
   return extractContent(parsed);
+}
+
+async function callLLM(messages: { role: string; content: string }[]): Promise<string | null> {
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    const out = await callChat("Groq", GROQ_BASE, groqKey, GROQ_MODEL, messages);
+    if (out) return out;
+    console.log("Groq failed, trying OpenAI backup");
+  }
+
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey) {
+    return callChat("OpenAI", OPENAI_BASE, openaiKey, OPENAI_MODEL, messages);
+  }
+
+  console.error("No GROQ_API_KEY or OPENAI_API_KEY");
+  return null;
 }
 
 export async function generatePost(): Promise<GeneratedPost | null> {
