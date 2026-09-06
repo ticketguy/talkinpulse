@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useAppStore } from "@/store";
@@ -20,6 +21,16 @@ export function Header() {
   };
 
   const user = session?.user as any;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
 
   return (
     <header style={{
@@ -106,20 +117,66 @@ export function Header() {
               }}
             >Connect X</button>
           ) : (
-            <div
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "4px 8px 4px 5px", borderRadius: 9,
-                border: `1px solid ${t.border}`, background: t.surface,
-                cursor: "pointer",
-              }}
-              onClick={() => signOut()}
-              title="Sign out"
-            >
-              <Avatar username={user?.username || user?.name || "user"} imageUrl={user?.image} size={22} />
-              <span className="hide-mobile" style={{ fontSize: 11, color: t.text, fontWeight: 600 }}>
-                @{user?.username || user?.name}
-              </span>
+            <div ref={menuRef} style={{ position: "relative" }}>
+              <div
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "4px 8px 4px 5px", borderRadius: 9,
+                  border: `1px solid ${t.border}`, background: t.surface,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab("profile"); setMenuOpen(false); }}
+                  title="Profile"
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", display: "flex" }}
+                >
+                  <Avatar username={user?.username || user?.name || "user"} imageUrl={user?.image} size={22} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((o) => !o)}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+                >
+                  <span className="hide-mobile" style={{ fontSize: 11, color: t.text, fontWeight: 600 }}>
+                    @{user?.username || user?.name}
+                  </span>
+                </button>
+              </div>
+              {menuOpen && (
+                <div style={{
+                  position: "absolute", right: 0, top: "calc(100% + 6px)",
+                  minWidth: 160, background: t.bg, border: `1px solid ${t.border}`,
+                  borderRadius: 10, padding: 6, boxShadow: "0 8px 24px rgba(0,0,0,0.25)", zIndex: 20,
+                }}>
+                  {[
+                    { label: "Profile", run: () => setActiveTab("profile") },
+                    { label: "Settings", run: () => setActiveTab("profile") },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => { item.run(); setMenuOpen(false); }}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left",
+                        background: "none", border: "none", color: t.text,
+                        fontSize: 13, fontWeight: 600, padding: "8px 10px",
+                        borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
+                      }}
+                    >{item.label}</button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { setMenuOpen(false); signOut(); }}
+                    style={{
+                      display: "block", width: "100%", textAlign: "left",
+                      background: "none", border: "none", color: t.accent,
+                      fontSize: 13, fontWeight: 600, padding: "8px 10px",
+                      borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >Log out</button>
+                </div>
+              )}
             </div>
           )}
         </div>
