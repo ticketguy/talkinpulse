@@ -1,7 +1,7 @@
 import { Category, PostType } from "@/types";
 
 const BASE = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
+const MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 
 export interface GeneratedPost {
   type: PostType;
