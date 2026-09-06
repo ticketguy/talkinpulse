@@ -8,6 +8,15 @@ import { useAppStore } from "@/store";
 import { useSession } from "next-auth/react";
 import { Comments } from "./Comments";
 
+function isXUrl(url?: string | null) {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    return host === "x.com" || host === "twitter.com";
+  } catch {
+    return false;
+  }
+}
 
 interface PostCardProps {
   post: Post;
@@ -23,9 +32,13 @@ export function PostCard({ post, onVote }: PostCardProps) {
   const [voting, setVoting] = useState(false);
   const [localYes, setLocalYes] = useState(post.yesCount);
   const [localNo, setLocalNo] = useState(post.noCount);
+  const [interpret, setInterpret] = useState<string | null>(null);
+  const [interpreting, setInterpreting] = useState(false);
 
   const localVote = votes[post.id] || post.userVote;
   const yesPct = yesPercent(localYes, localNo);
+  const fromX = isXUrl(post.sourceUrl) || !!post.xPostId;
+  const isNews = !!post.sourceUrl && !fromX && !post.author;
 
   const t = {
     surface: isDark ? "#141414" : "#ffffff",
@@ -52,24 +65,46 @@ export function PostCard({ post, onVote }: PostCardProps) {
     setVoting(false);
   };
 
-  // Parse notable replies
+  const runInterpret = async () => {
+    if (interpreting) return;
+    if (interpret) {
+      setInterpret(null);
+      return;
+    }
+    setInterpreting(true);
+    try {
+      const res = await fetch(`/api/posts/${post.id}/interpret`, { method: "POST" });
+      const data = await res.json();
+      setInterpret(data.text || data.error || "No read");
+    } catch {
+      setInterpret("Interpret failed");
+    }
+    setInterpreting(false);
+  };
+
   const notableRepliesArray = post.notableReplies
     ? post.notableReplies.split("|").map((r) => r.trim()).filter(Boolean)
     : [];
 
-  const displayAuthor = post.author?.username || post.originator?.replace("@", "");
-  const displayHandle = post.originator || (post.author ? `@${post.author.username}` : null);
+  const displayHandle = post.author
+    ? `@${post.author.username}`
+    : fromX && post.originator
+      ? post.originator
+      : null;
+  const displayAuthor = post.author?.username || post.originator?.replace("@", "") || "ct";
 
   return (
     <div style={{ background: t.surface, border: `1px solid ${t.border}`, borderRadius: 12, overflow: "hidden", transition: "border-color .2s" }} className="post-card">
-
-      {/* Main content */}
       <div style={{ padding: "14px 16px" }}>
-
-        {/* Tags row */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
           <PostTypeTag type={post.type} />
           <CategoryTag category={post.category as any} />
+          {isNews && (
+            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 20, fontWeight: 700, letterSpacing: 1, color: t.muted, border: `1px solid ${t.border}` }}>NEWS</span>
+          )}
+          {fromX && !post.author && (
+            <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 20, fontWeight: 700, letterSpacing: 1, color: t.accent, border: `1px solid ${t.accent}40` }}>CT</span>
+          )}
           {localVote && (
             <span style={{
               fontSize: 9, padding: "2px 8px", borderRadius: 20, fontWeight: 700, letterSpacing: 1,
@@ -80,7 +115,6 @@ export function PostCard({ post, onVote }: PostCardProps) {
           )}
         </div>
 
-        {/* Title + meta */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, marginBottom: post.body ? 8 : 10 }}>
           <p style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.55, color: t.text, margin: 0, flex: 1 }}>
             {post.title}
@@ -89,7 +123,7 @@ export function PostCard({ post, onVote }: PostCardProps) {
             {displayHandle && (
               <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-end", marginBottom: 2 }}>
                 <span style={{ fontSize: 11, color: t.accent, fontWeight: 700 }}>{displayHandle}</span>
-                <Avatar username={displayAuthor || "ct"} imageUrl={post.author?.imageUrl} size={18} />
+                <Avatar username={displayAuthor} imageUrl={post.author?.imageUrl} size={18} />
               </div>
             )}
             <div style={{ fontSize: 10, color: t.muted, fontFamily: "'JetBrains Mono', monospace" }}>{timeAgo(post.createdAt)}</div>
@@ -97,12 +131,10 @@ export function PostCard({ post, onVote }: PostCardProps) {
           </div>
         </div>
 
-        {/* Body */}
         {post.body && (
           <p style={{ fontSize: 13, color: t.textSub, lineHeight: 1.65, margin: "0 0 10px" }}>{post.body}</p>
         )}
 
-        {/* Market bar */}
         {post.type === "MARKET" && (
           <div style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
@@ -119,7 +151,6 @@ export function PostCard({ post, onVote }: PostCardProps) {
           </div>
         )}
 
-        {/* Action row */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             {post.signal && (
@@ -129,12 +160,16 @@ export function PostCard({ post, onVote }: PostCardProps) {
             )}
             {notableRepliesArray.length > 0 && (
               <button onClick={() => setRepliesOpen(v => !v)} style={{ fontSize: 11, color: t.muted, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, padding: 0 }}>
-                {repliesOpen ? "▲" : "▼"} CT takes
+                {repliesOpen ? "▲" : "▼"} {fromX ? "CT takes" : "reads"}
+              </button>
+            )}
+            {isNews && (
+              <button onClick={runInterpret} style={{ fontSize: 11, color: t.accent, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit", fontWeight: 600, padding: 0 }}>
+                {interpreting ? "reading…" : interpret ? "▲ hide read" : "▼ interpret"}
               </button>
             )}
           </div>
 
-          {/* Vote buttons */}
           {post.type === "MARKET" && (
             !localVote ? (
               <div style={{ display: "flex", gap: 6 }}>
@@ -148,7 +183,6 @@ export function PostCard({ post, onVote }: PostCardProps) {
                       border: `1.5px solid ${s === "yes" ? t.yes : t.no}35`,
                       background: s === "yes" ? t.yesDim : t.noDim,
                       color: s === "yes" ? t.yes : t.no,
-                      transition: "filter .15s, transform .1s",
                     }}>{s}</button>
                 ))}
               </div>
@@ -165,18 +199,23 @@ export function PostCard({ post, onVote }: PostCardProps) {
         </div>
       </div>
 
-      {/* Signal panel */}
       {sigOpen && post.signal && (
-        <div style={{ padding: "10px 16px", borderTop: `1px solid ${t.border}`, background: t.signalBg, animation: "fadeUp .2s ease" }}>
-          <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>🧠 CT Signal</div>
+        <div style={{ padding: "10px 16px", borderTop: `1px solid ${t.border}`, background: t.signalBg }}>
+          <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>Signal</div>
           <p style={{ fontSize: 12, color: t.textSub, lineHeight: 1.65, margin: 0 }}>{post.signal}</p>
         </div>
       )}
 
-      {/* Notable CT takes panel */}
+      {interpret && (
+        <div style={{ padding: "10px 16px", borderTop: `1px solid ${t.border}`, background: t.signalBg }}>
+          <div style={{ fontSize: 10, color: t.accent, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>AI read</div>
+          <p style={{ fontSize: 12, color: t.textSub, lineHeight: 1.65, margin: 0, whiteSpace: "pre-wrap" }}>{interpret}</p>
+        </div>
+      )}
+
       {repliesOpen && notableRepliesArray.length > 0 && (
-        <div style={{ padding: "12px 16px", borderTop: `1px solid ${t.border}`, background: t.repliesBg, animation: "fadeUp .2s ease" }}>
-          <div style={{ fontSize: 10, color: t.muted, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>💬 Notable CT Takes</div>
+        <div style={{ padding: "12px 16px", borderTop: `1px solid ${t.border}`, background: t.repliesBg }}>
+          <div style={{ fontSize: 10, color: t.muted, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 10 }}>{fromX ? "CT takes" : "Perspectives"}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {notableRepliesArray.map((reply, i) => (
               <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
@@ -188,18 +227,15 @@ export function PostCard({ post, onVote }: PostCardProps) {
         </div>
       )}
 
-      {/* Footer: share + comments */}
       <div style={{ padding: "10px 16px", borderTop: `1px solid ${t.border}`, background: t.footerBg }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
           {post.sourceUrl && (
             <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 7, border: `1px solid ${t.border}`, background: "transparent", color: t.muted, fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
-              Source
+              {isNews ? "Article" : "Source"}
             </a>
           )}
           {post.xPostId && (
             <a href={`https://x.com/i/web/status/${post.xPostId}`} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 7, border: `1px solid ${t.border}`, background: "transparent", color: t.muted, fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.741l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.912-5.622z"/></svg>
               Reply on X
             </a>
           )}
