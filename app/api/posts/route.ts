@@ -14,16 +14,19 @@ export async function GET(req: NextRequest) {
   try {
     const where: any = {};
 
-    if (filter === "hot") where.hot = true;
+    if (filter === "hot") where.OR = [{ hot: true }, { category: "Hot" }];
+    if (filter === "trending") where.category = "Trending";
+    if (filter === "opinion") where.category = "Opinion";
+    if (filter === "divide") where.category = "Divide";
+    if (filter === "cooker") where.category = "LittleCooker";
     if (filter === "markets") where.type = "MARKET";
     if (filter === "takes") where.type = "TAKE";
-    if (filter === "conversations") where.type = "CONVERSATION";
+    if (filter === "conversations") where.OR = [{ type: "CONVERSATION" }, { category: "Convo" }];
     if (filter === "events") where.type = "EVENT";
     if (filter === "new") {
       where.createdAt = { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
     }
 
-    // Takes ranking by time period
     if (filter === "takes" && rank) {
       const periodMap: Record<string, number> = {
         "24h": 24 * 60 * 60 * 1000,
@@ -35,7 +38,6 @@ export async function GET(req: NextRequest) {
       where.createdAt = { gte: new Date(Date.now() - ms) };
     }
 
-    // Order takes by vote count (engagement), others by hot then recent
     const orderBy: any = filter === "takes"
       ? [{ votes: { _count: "desc" } }, { createdAt: "desc" }]
       : [{ hot: "desc" }, { createdAt: "desc" }];
