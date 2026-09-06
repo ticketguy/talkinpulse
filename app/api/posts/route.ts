@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionSafe, requireUserId } from "@/lib/session";
 import { FeedFilter } from "@/types";
-import { isHttpUrl } from "@/lib/x";
+import { isHttpUrl, isTweetStatusUrl } from "@/lib/x";
 
 function startOfToday() {
   const d = new Date();
@@ -102,6 +102,9 @@ export async function POST(req: NextRequest) {
     const { type, title, body: postBody, category, endsAt, sourceUrl } = body;
     if (!type || !title) return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     if (!isHttpUrl(sourceUrl)) return NextResponse.json({ error: "sourceUrl required" }, { status: 400 });
+    if (/x\.com|twitter\.com/i.test(sourceUrl) && !isTweetStatusUrl(sourceUrl)) {
+      return NextResponse.json({ error: "X source must be a tweet /status/ URL" }, { status: 400 });
+    }
 
     const post = await prisma.post.create({
       data: {

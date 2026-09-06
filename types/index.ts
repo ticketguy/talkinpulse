@@ -64,7 +64,7 @@ export interface Post {
   hot: boolean;
   originator?: string | null;
   notableReplies?: string | null;
-  sourceUrl?: string | null;
+  sourceUrl: string;
   xPostId?: string | null;
   isAiGen: boolean;
   resolvedAt?: string | null;
