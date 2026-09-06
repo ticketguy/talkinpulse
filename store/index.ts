@@ -24,7 +24,7 @@ export const useAppStore = create<AppStore>()(
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set((s) => ({ theme: s.theme === "dark" ? "light" : "dark" })),
 
-      feedFilter: "all",
+      feedFilter: "markets",
       setFeedFilter: (feedFilter) => set({ feedFilter }),
 
       votes: {},
