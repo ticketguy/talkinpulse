@@ -1,7 +1,7 @@
 import { Category, PostType } from "@/types";
 
-const BASE = process.env.OPENAI_BASE_URL || "https://agentrouter.org/v1";
-const MODEL = process.env.OPENAI_MODEL || "gpt-5.6-sol";
+const BASE = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 export interface GeneratedPost {
   type: PostType;
@@ -85,7 +85,7 @@ function extractContent(payload: any): string | null {
       }
     }
     if (trimmed.startsWith("<!" ) || trimmed.includes("aliyun_waf")) {
-      console.error("AgentRouter returned WAF HTML, not a completion");
+      console.error("LLM returned HTML, not a completion");
       return null;
     }
     return trimmed || null;
@@ -98,11 +98,11 @@ function extractContent(payload: any): string | null {
   }
   if (typeof payload?.output_text === "string" && payload.output_text.trim()) return payload.output_text;
   if (typeof payload?.content === "string" && payload.content.trim()) return payload.content;
-  console.error("AgentRouter unexpected payload", typeof payload);
+  console.error("LLM unexpected payload", typeof payload);
   return null;
 }
 
-async function callAgentRouter(messages: { role: string; content: string }[]): Promise<string | null> {
+async function callLLM(messages: { role: string; content: string }[]): Promise<string | null> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
   const started = Date.now();
@@ -111,22 +111,19 @@ async function callAgentRouter(messages: { role: string; content: string }[]): P
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
-      Accept: "application/json",
-      Originator: "codex_cli_rs",
-      Version: "0.101.0",
-      "User-Agent": "codex_cli_rs/0.101.0 (Mac OS 26.0.1; arm64) Apple_Terminal/464",
     },
     body: JSON.stringify({
       model: MODEL,
       temperature: 0.85,
       max_tokens: 700,
+      response_format: { type: "json_object" },
       messages,
     }),
   });
   const text = await res.text();
-  console.log(`AgentRouter latency ${Date.now() - started}ms status=${res.status} model=${MODEL} bytes=${text.length}`);
+  console.log(`OpenAI latency ${Date.now() - started}ms status=${res.status} model=${MODEL} bytes=${text.length}`);
   if (!res.ok) {
-    console.error("AgentRouter error body", text.slice(0, 300));
+    console.error("OpenAI error body", text.slice(0, 300));
     return null;
   }
   let parsed: any = text;
@@ -155,7 +152,7 @@ export async function generatePost(): Promise<GeneratedPost | null> {
 
   const systemPrompts: Record<PostType, string> = {
     MARKET: `You are TalkinPulse's market engine for Crypto Twitter.
-Generate a CT prediction market based ONLY on the provided real source. Cover crypto, blockchain, web3 broadly — both loud narratives and quieter ones. Respond ONLY with valid JSON:
+Generate a CT prediction market based ONLY on the provided real source. Cover crypto, blockchain, web3 broadly. Respond ONLY with valid JSON:
 {
   "title": "sharp yes/no question max 90 chars based on the real topic",
   "signal": "1-2 sentences of what the source suggests about sentiment/outcome",
@@ -199,7 +196,7 @@ Generate a CT event post based ONLY on the provided real source. Cover crypto, b
   };
 
   try {
-    const raw = await callAgentRouter([
+    const raw = await callLLM([
       { role: "system", content: systemPrompts[type] },
       { role: "user", content: topicContext },
     ]);
