@@ -5,10 +5,20 @@ import { isHttpUrl, isTweetStatusUrl } from "@/lib/x";
 
 function okSource(url?: string | null, type?: string) {
   if (!url) return false;
+  if (isXUrlLoose(url)) return isTweetStatusUrl(url);
   if (type === "MARKET" || type === "TAKE" || type === "CONVERSATION") {
-    return isTweetStatusUrl(url) || isHttpUrl(url);
+    return isTweetStatusUrl(url);
   }
   return isHttpUrl(url);
+}
+
+function isXUrlLoose(url: string) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    return host === "x.com" || host === "twitter.com";
+  } catch {
+    return false;
+  }
 }
 
 export async function GET(req: NextRequest) {
