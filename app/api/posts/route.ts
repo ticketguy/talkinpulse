@@ -22,16 +22,25 @@ export async function GET(req: NextRequest) {
   const today = startOfToday();
 
   try {
-    const freshness = {
-      OR: [
-        { createdAt: { gte: today } },
-        { type: "MARKET" as const, resolvedAt: null, endsAt: { gt: now } },
-      ],
-    };
+    const isNews = { type: "EVENT" as const, xPostId: null };
+    const notNews = { NOT: isNews };
+
+    const freshness = filter === "news"
+      ? { createdAt: { gte: today } }
+      : {
+          OR: [
+            { createdAt: { gte: today } },
+            { type: "MARKET" as const, resolvedAt: null, endsAt: { gt: now } },
+          ],
+        };
 
     const where: any = { AND: [freshness] };
     if (since) where.AND.push({ createdAt: { gt: new Date(since) } });
-    if (filter === "news") where.AND.push({ type: { not: "MARKET" } });
+    if (filter === "news") {
+      where.AND.push(isNews);
+    } else {
+      where.AND.push(notNews);
+    }
     if (filter === "hot") where.AND.push({ OR: [{ hot: true }, { category: "Hot" }] });
     if (filter === "trending") where.AND.push({ category: "Trending" });
     if (filter === "opinion") where.AND.push({ category: "Opinion" });
@@ -40,7 +49,7 @@ export async function GET(req: NextRequest) {
     if (filter === "markets") where.AND.push({ type: "MARKET" });
     if (filter === "takes") where.AND.push({ type: "TAKE" });
     if (filter === "conversations") where.AND.push({ OR: [{ type: "CONVERSATION" }, { category: "Convo" }] });
-    if (filter === "events") where.AND.push({ type: "EVENT" });
+    if (filter === "events") where.AND.push({ type: "EVENT", xPostId: { not: null } });
     if (filter === "new") where.AND.push({ createdAt: { gte: today } });
 
     if (filter === "takes" && rank) {
@@ -72,8 +81,14 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    const year = now.getFullYear();
+    const stale = (p: any) => {
+      const years = `${p.title || ""} ${p.body || ""}`.match(/20\d{2}/g) || [];
+      return years.some((y: string) => Number(y) < year);
+    };
+    const freshPosts = posts.filter((p: any) => !stale(p));
     const hasMore = posts.length > take;
-    const items = posts.slice(0, take).map((p: any) => ({
+    const items = freshPosts.slice(0, take).map((p: any) => ({
       ...p,
       userVote: p.votes?.[0]?.side || null,
       votes: undefined,
