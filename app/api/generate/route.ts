@@ -27,8 +27,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (!process.env.OPENAI_API_KEY) {
-    return NextResponse.json({ error: "OPENAI_API_KEY missing" }, { status: 500 });
+  if (!process.env.GROQ_API_KEY && !process.env.OPENAI_API_KEY) {
+    return NextResponse.json({ error: "Set GROQ_API_KEY or OPENAI_API_KEY" }, { status: 500 });
   }
 
   try {
