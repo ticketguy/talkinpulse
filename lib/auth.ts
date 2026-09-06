@@ -97,16 +97,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       (session as any).accessToken = token.accessToken;
       if (session.user && token.sub) {
-        const dbUser = await prisma.user.findFirst({ where: { xId: token.sub as string } });
-        if (dbUser) {
-          (session.user as any).id = dbUser.id;
-          (session.user as any).username = dbUser.username;
-          (session.user as any).repScore = dbUser.repScore;
-          (session.user as any).repLevel = dbUser.repLevel;
-          (session.user as any).talkinPoints = dbUser.talkinPoints;
-          (session.user as any).isAdmin = dbUser.isAdmin;
-          (session.user as any).adminRole = dbUser.adminRole;
-          (session.user as any).xId = dbUser.xId;
+        try {
+          const dbUser = await prisma.user.findFirst({ where: { xId: token.sub as string } });
+          if (dbUser) {
+            (session.user as any).id = dbUser.id;
+            (session.user as any).username = dbUser.username;
+            (session.user as any).repScore = dbUser.repScore;
+            (session.user as any).repLevel = dbUser.repLevel;
+            (session.user as any).talkinPoints = dbUser.talkinPoints;
+            (session.user as any).isAdmin = dbUser.isAdmin;
+            (session.user as any).adminRole = dbUser.adminRole;
+            (session.user as any).xId = dbUser.xId;
+          }
+        } catch (e) {
+          console.error("Auth session lookup failed", e);
         }
       }
       return session;
