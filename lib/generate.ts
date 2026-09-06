@@ -8,9 +8,17 @@ const OPENAI_BASE = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.6-luna";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Sept 2026 mcap names, stables excluded. Argument terms ride on each group.
 const TOP_COINS = [
-  "BTC", "ETH", "SOL", "XRP", "BNB", "DOGE", "ADA", "TRX", "AVAX", "LINK",
-  "TON", "SHIB", "DOT", "BCH", "LTC", "UNI", "NEAR", "APT", "ARB", "ICP",
+  "BTC", "ETH", "BNB", "XRP", "SOL", "TRX", "HYPE", "ZEC", "DOGE", "XMR",
+  "LINK", "ADA", "XLM", "BCH", "AVAX", "TON", "SUI", "UNI", "NEAR", "DOT",
+];
+const ARG_TERMS = "debate OR vs OR beef OR criticizes OR responds";
+const VERTICAL_QUERIES = [
+  "(TAO OR FET OR RENDER OR \"AI agent\" OR \"onchain AI\") (crypto OR token)",
+  "(tokenized OR RWA OR xStocks OR Ondo OR Backed) (stock OR equity OR onchain)",
+  "(NFT OR allowlist OR \"floor price\") (mint OR drama OR community)",
+  "(airdrop OR sybil OR \"token distribution\" OR \"airdrop farming\" OR eligibility)",
 ];
 
 export interface GeneratedPost {
@@ -109,7 +117,7 @@ async function fetchNewsLane(): Promise<Candidate[]> {
     if (isXUrl(r.url) && !isTweetStatusUrl(r.url)) return;
     seen.add(r.url);
     const publishedAt = r.published_date ? new Date(r.published_date) : undefined;
-    if (publishedAt && !isFresh(publishedAt)) return;
+    if (!isFresh(publishedAt || null)) return;
     const recency = publishedAt ? Math.max(0, 24 - (Date.now() - publishedAt.getTime()) / 36e5) : 8;
     out.push({
       title: r.title,
@@ -126,13 +134,13 @@ async function fetchNewsLane(): Promise<Candidate[]> {
 }
 
 async function fetchCtLane(): Promise<Candidate[]> {
-  const coins = [...TOP_COINS].sort(() => Math.random() - 0.5).slice(0, 6);
+  // Paid X recent search (TWITTER_BEARER_TOKEN). Batch coins so one hourly
+  // run covers the full book without 20 separate calls.
+  const groups: string[][] = [];
+  for (let i = 0; i < TOP_COINS.length; i += 5) groups.push(TOP_COINS.slice(i, i + 5));
   const queries = [
-    ...coins.map((c) => `$${c} (debate OR vs OR beef OR criticizes OR responds)`),
-    "(TAO OR FET OR RENDER OR \"AI agent\") (crypto OR token)",
-    "(tokenized OR RWA OR xStocks OR Ondo) (stock OR equity)",
-    "(NFT OR allowlist OR \"floor price\") (mint OR drama)",
-    "(airdrop OR sybil OR \"token distribution\")",
+    ...groups.map((g) => `(${g.map((c) => `$${c}`).join(" OR ")}) (${ARG_TERMS})`),
+    ...VERTICAL_QUERIES,
   ];
   const hits = await Promise.all(queries.map((q) => searchRecentTweets(q, 10)));
   const out: Candidate[] = [];
@@ -254,25 +262,28 @@ export async function generateBatch(): Promise<GeneratedPost[]> {
   const start = new Date();
   start.setHours(0, 0, 0, 0);
   const existing = await prisma.post.findMany({
-    where: { createdAt: { gte: start }, sourceUrl: { not: null } },
+    where: { createdAt: { gte: start } },
     select: { sourceUrl: true },
   });
-  const used = new Set(existing.map((p) => p.sourceUrl).filter(Boolean) as string[]);
+  const used = new Set(existing.map((p) => p.sourceUrl));
 
   const ranked = [...ct, ...news]
     .filter((c) => validSource(c) && !used.has(c.url))
     .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
+    .slice(0, 10);
 
-  const types: PostType[] = ["EVENT", "TAKE", "CONVERSATION", "MARKET"];
+  const ctTypes: PostType[] = ["TAKE", "CONVERSATION", "MARKET"];
   const out: GeneratedPost[] = [];
-  for (let i = 0; i < ranked.length; i++) {
-    const type = types[i % types.length];
-    const card = await cardFromCandidate(ranked[i], type);
+  let ctIdx = 0;
+  for (const source of ranked) {
+    const type: PostType = source.kind === "news" ? "EVENT" : ctTypes[ctIdx++ % ctTypes.length];
+    const card = await cardFromCandidate(source, type);
     if (!card?.sourceUrl) continue;
+    if (source.kind === "ct" && !isTweetStatusUrl(card.sourceUrl)) continue;
     used.add(card.sourceUrl);
     out.push(card);
-    if (card.type !== "MARKET") {
+    // Market twins only from tweet-sourced CT so non-news cards never inherit a profile/article URL.
+    if (card.type !== "MARKET" && source.kind === "ct") {
       const q = card.title.includes("?") ? card.title : `Does this play out: ${card.title.slice(0, 70)}?`;
       out.push({
         ...card,
