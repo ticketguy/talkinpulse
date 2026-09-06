@@ -25,7 +25,7 @@ export function yesPercent(yes: number, no: number) {
   return Math.round((yes / total) * 100);
 }
 
-export const CATEGORY_COLORS: Record<Category, string> = {
+export const CATEGORY_COLORS: Record<string, string> = {
   Narrative: "#e01c1c",
   Founder: "#8b5cf6",
   Collection: "#0ea5e9",
@@ -33,6 +33,12 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   Alpha: "#10b981",
   Event: "#f97316",
   Debate: "#ec4899",
+  Trending: "#ef4444",
+  Hot: "#f97316",
+  Opinion: "#8b5cf6",
+  Convo: "#f59e0b",
+  Divide: "#e11d48",
+  LittleCooker: "#14b8a6",
 };
 
 export const POST_TYPE_LABELS: Record<PostType, string> = {
@@ -50,7 +56,6 @@ export const POST_TYPE_ICONS: Record<PostType, string> = {
 };
 
 export function generateAvatarUrl(username: string) {
-  // Deterministic color from username
   let hash = 0;
   for (let i = 0; i < username.length; i++) {
     hash = username.charCodeAt(i) + ((hash << 5) - hash);
