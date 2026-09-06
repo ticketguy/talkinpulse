@@ -2,7 +2,15 @@
   "crons": [
     {
       "path": "/api/generate",
-      "schedule": "0 12 * * *"
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/resolve/expire",
+      "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/summary/weekly",
+      "schedule": "0 22 * * 0"
     }
   ]
 }
