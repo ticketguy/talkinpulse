@@ -3,29 +3,48 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { FeedFilter } from "@/types";
 
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
 export async function GET(req: NextRequest) {
   const session = await auth();
   const { searchParams } = new URL(req.url);
   const filter = (searchParams.get("filter") || "all") as FeedFilter;
   const rank = searchParams.get("rank") || "24h";
   const cursor = searchParams.get("cursor");
+  const since = searchParams.get("since");
   const take = 20;
+  const now = new Date();
+  const today = startOfToday();
 
   try {
-    const where: any = {};
+    const freshness = {
+      OR: [
+        { createdAt: { gte: today } },
+        { type: "MARKET" as const, resolvedAt: null, endsAt: { gt: now } },
+      ],
+    };
 
-    if (filter === "hot") where.OR = [{ hot: true }, { category: "Hot" }];
-    if (filter === "trending") where.category = "Trending";
-    if (filter === "opinion") where.category = "Opinion";
-    if (filter === "divide") where.category = "Divide";
-    if (filter === "cooker") where.category = "LittleCooker";
-    if (filter === "markets") where.type = "MARKET";
-    if (filter === "takes") where.type = "TAKE";
-    if (filter === "conversations") where.OR = [{ type: "CONVERSATION" }, { category: "Convo" }];
-    if (filter === "events") where.type = "EVENT";
-    if (filter === "new") {
-      where.createdAt = { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
+    const where: any = { AND: [freshness] };
+
+    if (since) {
+      where.AND.push({ createdAt: { gt: new Date(since) } });
     }
+
+    if (filter === "news") where.AND.push({ type: { not: "MARKET" } });
+    if (filter === "hot") where.AND.push({ OR: [{ hot: true }, { category: "Hot" }] });
+    if (filter === "trending") where.AND.push({ category: "Trending" });
+    if (filter === "opinion") where.AND.push({ category: "Opinion" });
+    if (filter === "divide") where.AND.push({ category: "Divide" });
+    if (filter === "cooker") where.AND.push({ category: "LittleCooker" });
+    if (filter === "markets") where.AND.push({ type: "MARKET" });
+    if (filter === "takes") where.AND.push({ type: "TAKE" });
+    if (filter === "conversations") where.AND.push({ OR: [{ type: "CONVERSATION" }, { category: "Convo" }] });
+    if (filter === "events") where.AND.push({ type: "EVENT" });
+    if (filter === "new") where.AND.push({ createdAt: { gte: today } });
 
     if (filter === "takes" && rank) {
       const periodMap: Record<string, number> = {
@@ -35,7 +54,7 @@ export async function GET(req: NextRequest) {
         "1y": 365 * 24 * 60 * 60 * 1000,
       };
       const ms = periodMap[rank] || periodMap["24h"];
-      where.createdAt = { gte: new Date(Date.now() - ms) };
+      where.AND.push({ createdAt: { gte: new Date(Date.now() - ms) } });
     }
 
     const orderBy: any = filter === "takes"
@@ -68,7 +87,11 @@ export async function GET(req: NextRequest) {
       updatedAt: p.updatedAt.toISOString(),
     }));
 
-    return NextResponse.json({ posts: items, nextCursor: hasMore ? items[items.length - 1].id : null });
+    return NextResponse.json({
+      posts: items,
+      nextCursor: hasMore ? items[items.length - 1].id : null,
+      serverTime: now.toISOString(),
+    });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });

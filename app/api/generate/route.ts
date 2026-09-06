@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generatePost } from "@/lib/generate";
+import { generateBatch } from "@/lib/generate";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -32,31 +32,35 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const generated = await generatePost();
-    if (!generated) {
+    const generated = await generateBatch();
+    if (!generated.length) {
       return NextResponse.json({ error: "Generation returned null" }, { status: 500 });
     }
 
-    const post = await prisma.post.create({
-      data: {
-        type: generated.type,
-        title: generated.title,
-        body: generated.body || null,
-        signal: generated.signal || null,
-        category: generated.category,
-        endsAt: generated.endsAt || null,
-        hot: generated.hot,
-        originator: generated.originator || null,
-        notableReplies: generated.notableReplies || null,
-        sourceUrl: generated.sourceUrl || null,
-        yesCount: generated.yesCount || 50,
-        noCount: generated.noCount || 50,
-        isAiGen: true,
-        authorId: null,
-      },
-    });
+    const created = [];
+    for (const item of generated) {
+      const post = await prisma.post.create({
+        data: {
+          type: item.type,
+          title: item.title,
+          body: item.body || null,
+          signal: item.signal || null,
+          category: item.category,
+          endsAt: item.endsAt || null,
+          hot: item.hot,
+          originator: item.originator || null,
+          notableReplies: null,
+          sourceUrl: item.sourceUrl || null,
+          yesCount: item.yesCount || (item.type === "MARKET" ? 50 : 0),
+          noCount: item.noCount || (item.type === "MARKET" ? 50 : 0),
+          isAiGen: true,
+          authorId: null,
+        },
+      });
+      created.push({ id: post.id, type: post.type, title: post.title });
+    }
 
-    return NextResponse.json({ success: true, post: { id: post.id, type: post.type, title: post.title } });
+    return NextResponse.json({ success: true, posts: created });
   } catch (e) {
     console.error("Generation error:", e);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
