@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  const adminUser = session?.user as any;
+  const gate = await requireUserId("Unauthorized");
+  if (gate.error) return gate.error;
+  const adminUser = gate.session?.user as any;
   if (!adminUser?.isAdmin && !["SUPER_ADMIN", "POINTS_MANAGER"].includes(adminUser?.adminRole)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -13,7 +14,6 @@ export async function POST(req: NextRequest) {
     const { type, userIds, amount, description } = await req.json();
 
     if (type === "weekly_reward") {
-      // Distribute to all users
       const users = await prisma.user.findMany({ select: { id: true } });
       await prisma.$transaction([
         ...users.map((u: any) => prisma.user.update({ where: { id: u.id }, data: { talkinPoints: { increment: amount } } })),

@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-// We need to store the user's X access token to post on their behalf.
-// NextAuth stores it in the JWT — we surface it here.
-// Requires tweet.write scope added to Twitter OAuth app.
+import { requireUserId } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Connect X to share" }, { status: 401 });
-  }
+  const gate = await requireUserId("Connect X to share");
+  if (gate.error || !gate.userId) return gate.error!;
+  const { session, userId } = gate;
 
   try {
     const { postId } = await req.json();
-    const userId = (session.user as any).id;
     const accessToken = (session as any).accessToken;
 
     if (!accessToken) {
@@ -24,19 +18,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fetch the post
     const post = await prisma.post.findUnique({
       where: { id: postId },
-      include: {
-        author: { select: { username: true } },
-      },
+      include: { author: { select: { username: true } } },
     });
 
-    if (!post) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
-    }
+    if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
-    // Format tweet text
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://talkinpulse.vercel.app";
     const typeEmoji: Record<string, string> = {
       MARKET: "📊",
@@ -46,14 +34,12 @@ export async function POST(req: NextRequest) {
     };
 
     const emoji = typeEmoji[post.type] || "📡";
-    const truncatedTitle =
-      post.title.length > 200 ? post.title.slice(0, 197) + "…" : post.title;
+    const truncatedTitle = post.title.length > 200 ? post.title.slice(0, 197) + "…" : post.title;
 
     const tweetText = post.type === "MARKET"
       ? `${emoji} ${truncatedTitle}\n\nYES ${post.yesCount}% vs NO ${post.noCount}%\n\nMake your call 👇\n${appUrl}\n\n#TalkinPulse #CT`
       : `${emoji} ${truncatedTitle}\n\nJoin the conversation 👇\n${appUrl}\n\n#TalkinPulse #CT`;
 
-    // Post to X via API v2
     const tweetRes = await fetch("https://api.twitter.com/2/tweets", {
       method: "POST",
       headers: {
@@ -66,19 +52,11 @@ export async function POST(req: NextRequest) {
     if (!tweetRes.ok) {
       const err = await tweetRes.json();
       console.error("Twitter post failed:", err);
-      return NextResponse.json(
-        { error: "Failed to post to X", detail: err },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: "Failed to post to X", detail: err }, { status: 502 });
     }
 
     const tweet = await tweetRes.json();
-
-    // Rep bump for sharing
-    await prisma.user.update({
-      where: { id: userId },
-      data: { repScore: { increment: 10 } },
-    });
+    await prisma.user.update({ where: { id: userId }, data: { repScore: { increment: 10 } } });
 
     return NextResponse.json({
       success: true,

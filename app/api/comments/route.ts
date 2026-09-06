@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/session";
 import { postToX } from "@/lib/x";
 
 export async function GET(req: NextRequest) {
@@ -25,12 +25,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Connect X to comment" }, { status: 401 });
+  const gate = await requireUserId("Connect X to comment");
+  if (gate.error || !gate.userId) return gate.error!;
+  const { session, userId } = gate;
 
   try {
     const { postId, body, postToX: alsoX } = await req.json();
-    const userId = (session.user as any).id;
     if (!postId || !body?.trim()) return NextResponse.json({ error: "postId and body required" }, { status: 400 });
     if (body.trim().length > 500) return NextResponse.json({ error: "Take too long (max 500)" }, { status: 400 });
 

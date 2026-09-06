@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/session";
 
 export async function GET() {
-  const session = await auth();
-  const adminUser = session?.user as any;
+  const gate = await requireUserId("Unauthorized");
+  if (gate.error) return gate.error;
+  const adminUser = gate.session?.user as any;
   if (!adminUser?.isAdmin && !adminUser?.adminRole) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
@@ -24,13 +25,14 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await auth();
-  const adminUser = session?.user as any;
+  const gate = await requireUserId("Unauthorized");
+  if (gate.error) return gate.error;
+  const adminUser = gate.session?.user as any;
   if (adminUser?.adminRole !== "SUPER_ADMIN") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     const { userId, adminRole, repLevel } = await req.json();
-    const updated = await prisma.user.update({
+    await prisma.user.update({
       where: { id: userId },
       data: {
         ...(adminRole !== undefined && { adminRole, isAdmin: !!adminRole }),

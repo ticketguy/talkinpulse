@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/session";
 
-export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const userId = (session.user as any).id;
+export async function GET() {
+  const gate = await requireUserId("Unauthorized");
+  if (gate.error || !gate.userId) return gate.error!;
+  const userId = gate.userId;
   try {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -37,10 +36,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const userId = (session.user as any).id;
+  const gate = await requireUserId("Unauthorized");
+  if (gate.error || !gate.userId) return gate.error!;
+  const userId = gate.userId;
   try {
     const { customBio, customImageUrl, displayName } = await req.json();
     const updated = await prisma.user.update({

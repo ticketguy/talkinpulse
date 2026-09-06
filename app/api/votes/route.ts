@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { auth } from "@/lib/auth";
+import { requireUserId } from "@/lib/session";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Connect X to vote" }, { status: 401 });
+  const gate = await requireUserId("Connect X to vote");
+  if (gate.error || !gate.userId) return gate.error!;
+  const userId = gate.userId;
 
   try {
     const { postId, side, pointsWagered = 10 } = await req.json();
-    const userId = (session.user as any).id;
 
     if (!postId || !["yes", "no"].includes(side)) return NextResponse.json({ error: "Invalid" }, { status: 400 });
 
@@ -25,7 +25,6 @@ export async function POST(req: NextRequest) {
     const existing = await prisma.vote.findUnique({ where: { userId_postId: { userId, postId } } });
     if (existing) return NextResponse.json({ error: "Already voted" }, { status: 400 });
 
-    // Deduct points and create vote
     await prisma.$transaction([
       prisma.vote.create({ data: { userId, postId, side, pointsWagered: wager } }),
       prisma.post.update({
