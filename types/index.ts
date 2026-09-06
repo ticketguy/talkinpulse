@@ -115,6 +115,7 @@ export type FeedFilter =
   | "all"
   | "hot"
   | "new"
+  | "news"
   | "markets"
   | "takes"
   | "events"
