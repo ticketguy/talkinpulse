@@ -48,12 +48,12 @@ model Post {
   hot             Boolean     @default(false)
   originator      String?
   notableReplies  String?
-  sourceUrl       String?
+  sourceUrl       String
   xPostId         String?
   authorId        String?
   isAiGen         Boolean     @default(false)
   resolvedAt      DateTime?
-  resolvedOutcome String?     // "YES" | "NO" | "NEUTRAL"
+  resolvedOutcome String?
   pointsPool      Int         @default(0)
   resolutionNote  String?
   createdAt       DateTime    @default(now())
@@ -68,7 +68,7 @@ model Post {
 
 model Vote {
   id            String   @id @default(cuid())
-  side          String   // "yes" | "no"
+  side          String
   pointsWagered Int      @default(0)
   pointsWon     Int      @default(0)
   userId        String
@@ -97,10 +97,10 @@ model Comment {
 }
 
 model PointTransaction {
-  id          String   @id @default(cuid())
+  id          String   @id @default(now())
   userId      String
   amount      Int
-  type        String   // "vote_win" | "vote_loss" | "vote_neutral" | "comment" | "rep_level_up" | "manual" | "weekly_reward" | "signup"
+  type        String
   description String?
   postId      String?
   createdAt   DateTime @default(now())

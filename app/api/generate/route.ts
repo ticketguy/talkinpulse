@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateBatch } from "@/lib/generate";
+import { isHttpUrl, isTweetStatusUrl } from "@/lib/x";
+
+function okSource(url?: string | null, type?: string) {
+  if (!url) return false;
+  if (type === "MARKET" || type === "TAKE" || type === "CONVERSATION") {
+    return isTweetStatusUrl(url) || isHttpUrl(url);
+  }
+  return isHttpUrl(url);
+}
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -12,18 +21,10 @@ export async function GET(req: NextRequest) {
 
   if (process.env.NODE_ENV === "production") {
     if (!expected) {
-      return NextResponse.json(
-        { error: "Set CRON_SECRET or AUTH_SECRET on Vercel" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "Set CRON_SECRET or AUTH_SECRET on Vercel" }, { status: 500 });
     }
-    const bearerOk = authHeader === `Bearer ${expected}`;
-    const queryOk = querySecret === expected;
-    if (!bearerOk && !queryOk) {
-      return NextResponse.json(
-        { error: "Pass ?secret=YOUR_CRON_SECRET_OR_AUTH_SECRET" },
-        { status: 401 }
-      );
+    if (authHeader !== `Bearer ${expected}` && querySecret !== expected) {
+      return NextResponse.json({ error: "Pass ?secret=YOUR_CRON_SECRET_OR_AUTH_SECRET" }, { status: 401 });
     }
   }
 
@@ -33,12 +34,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const generated = await generateBatch();
-    if (!generated.length) {
-      return NextResponse.json({ error: "Generation returned null" }, { status: 500 });
-    }
-
     const created = [];
     for (const item of generated) {
+      if (!okSource(item.sourceUrl, item.type)) continue;
       const post = await prisma.post.create({
         data: {
           type: item.type,
@@ -46,11 +44,12 @@ export async function GET(req: NextRequest) {
           body: item.body || null,
           signal: item.signal || null,
           category: item.category,
-          endsAt: item.endsAt || null,
+          endsAt: item.type === "MARKET" ? new Date(Date.now() + 24 * 60 * 60 * 1000) : item.endsAt || null,
           hot: item.hot,
           originator: item.originator || null,
           notableReplies: null,
-          sourceUrl: item.sourceUrl || null,
+          sourceUrl: item.sourceUrl,
+          xPostId: item.xPostId || null,
           yesCount: item.yesCount || (item.type === "MARKET" ? 50 : 0),
           noCount: item.noCount || (item.type === "MARKET" ? 50 : 0),
           isAiGen: true,
@@ -59,7 +58,9 @@ export async function GET(req: NextRequest) {
       });
       created.push({ id: post.id, type: post.type, title: post.title });
     }
-
+    if (!created.length) {
+      return NextResponse.json({ success: true, posts: [], note: "No fresh sourced candidates" });
+    }
     return NextResponse.json({ success: true, posts: created });
   } catch (e) {
     console.error("Generation error:", e);
